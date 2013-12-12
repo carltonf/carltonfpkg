@@ -391,21 +391,62 @@ start cycling.
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; enhanced doc lookup
 ;;; 
-(defun my-go-to-man (&optional last-man)
-  "Go to man page, with prefix LAST-MAN, jump to last man page."
-  (interactive "P")
-  (if last-man
-      (switch-to-buffer-other-window
-       (let ((last-man-buf))
-         (catch 'found
-           (dolist (buf (buffer-list))
-             ;; buffer list from `buffer-list' is sorted in the visiting order, so we
-             ;; only need to find the first buffer with `Man-mode'
-             (cond ((eq (buffer-local-value 'major-mode buf) 'Man-mode)
-                    (setq last-man-buf buf)
-                    (throw 'found nil)))))
-         last-man-buf))
-    (command-execute #'man)))
+(defun myi-list-opened-man-buffers ()
+  "Return a list of opened man page buffers."
+  (let ((man-buf-list))
+    (mapc (lambda (curbuf)
+            (when (eq (buffer-local-value 'major-mode curbuf)
+                      'Man-mode)
+              (add-to-list 'man-buf-list (buffer-name curbuf))))
+          (buffer-list))
+    man-buf-list))
+
+(defun my-go-to-man ()
+  "Go to man page by using ido to select entries in `Man-topic-history' first.
+
+TODO currently no match is not allowed, amend this by passing
+users' input to man command. (currently mitigate through putting
+input into `Man-topic-history'.)"
+  (interactive)
+  ;; With asynchronous call, we have to wait for a bit before we can purge the
+  ;; list. `lexical-let' has to be used here, o/w the callback function will
+  ;; lose the definition of `man-buf'
+  ;;
+  ;; TODO eliminate the needs of timer.
+  (lexical-let* ((man-args
+                  (ido-completing-read "Man Entry: " Man-topic-history))
+                 (man-buf (cond ((or (null man-args)
+                                     (not (member man-args Man-topic-history)))
+                                 ;; add to history for `M-p' completion, will
+                                 ;; be purged if invalid.
+                                 (add-to-history 'Man-topic-history man-args)
+                                 (command-execute #'man))
+                                (t
+                                 (man man-args)))))
+    (run-at-time "2 sec" nil
+                 (lambda ()
+                   (unless (buffer-name man-buf)
+                     (pop Man-topic-history)
+                     (delete "" Man-topic-history)
+                     (delete-dups Man-topic-history)
+                     (message (format "Man: purging from history invalid man entry '%s'"
+                                      man-args)))))))
+
+(defun my-man-imenu-regex-expressions ()
+  "Add to `Man-mode-hook' for use, to create more index.
+
+TODO not very smart as the current pattern matching doesn't
+consider text properties."
+  (setq imenu-generic-expression
+        (list (list Man-arguments "^\\([A-Z][A-Z0-9 /-]+\\)$" 0)
+              ;; (list (concat "CO-" Man-arguments)
+              ;;       "^       \\([A-Za-z/-]+\\).*" 1)
+              (list (concat Man-arguments "-CO") ;commands or operation
+                    (concat "^" (make-string 7 32)
+                           "\\([A-Za-z/-]+\\)"
+                           ".*\n+"
+                           (make-string 9 32)) 1))))
+(add-hook 'Man-mode-hook #'my-man-imenu-regex-expressions)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; enhanced utility buffers
