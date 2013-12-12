@@ -661,6 +661,77 @@ sequence of words."
 
 (ad-activate 'word-search-regexp)
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Enhanced Org
+(defun my-org-source-auto-format (BEG END)
+  "Surround the marked region with org inline source tag, the
+  major mode used is the one where the region is in."
+  (interactive "r")
+  (let ((cur-mode-name (format "%s" major-mode))
+        (old-buffer (current-buffer)))
+    (with-temp-buffer
+      (insert "#+BEGIN_SRC " cur-mode-name)
+      ;; remove the ending "-mode"
+      (backward-kill-word 1)
+      (delete-backward-char 1)
+      (insert "\n")
+      ;; TODO insert marked region here
+      (insert-buffer-substring-no-properties old-buffer BEG END)
+      (insert "\n#+END_SRC\n")
+      (kill-new (buffer-string)))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Enhanced Emacs Configuration Helper
+;;; 
+;; helper functions to locate key Emacs directory/files
+(defvar myi-emacs-key-pos
+  '("~/.icrepos/emacs-custom-lisp-repos/"
+    "~/etc/emacs"
+    "~/etc/emacs/custom-lisp/"))
+
+(defun myi-goto-key-pos ()
+  "Go to key pos."
+  (interactive)
+  (let ((key-pos (ido-completing-read "Key Pos: "
+                                      myi-emacs-key-pos)))
+    (dired key-pos)))
+
+(defun myi-custom-lisp-dev-prep ()
+  "Helper function to develop custom-lisp packages. Can only be
+used in `dired-mode'. Exchange the name of local custom lisp
+directory and link to custom lisp repo."
+  (interactive)
+  (unless (eq (buffer-local-value 'major-mode (current-buffer))
+              'dired-mode)
+    (error "Can only be used in dired buffer."))
+  (let ((pkg-name (dired-get-filename 'no-dir))
+        (pkg-link-name)
+        (pkg-tmp-name)
+        (pkg-repo-path))
+    (if (string-match "_\\(.+\\)\\.iclink"
+                      pkg-name)
+        (progn (setq pkg-link-name pkg-name)
+               (setq pkg-name (match-string-no-properties 1 pkg-link-name)))
+      (setq pkg-link-name
+            (concat "_" pkg-name ".iclink")))
+    (message (format "Creating/Switching custom lisp local directory and repo link for '%s' and '%s'."
+                     pkg-name pkg-link-name))
+    ;; create symbolic link to repo
+    ;; assuming that original name as file always exists
+    ;; the following runs only for the first time.
+    (setq pkg-repo-path (concat "~/.icrepos/emacs-custom-lisp-repos/"
+                                pkg-name))
+    ;; `file-exists-p' follows the link
+    (unless (file-exists-p pkg-link-name)
+      (if (file-symlink-p pkg-link-name)
+          (warn "Emacs Custom Lisp repo '%s' not found!!" pkg-name)
+        (make-symbolic-link pkg-repo-path pkg-link-name)))
+    ;; exchange names
+    (setq pkg-tmp-name (concat pkg-name (emacs-uptime "%s")))
+    (rename-file pkg-name pkg-tmp-name)
+    (rename-file pkg-link-name pkg-name)
+    (rename-file pkg-tmp-name pkg-link-name)))
+
 
 (provide 'carltonfpkg)
 ;;; carltonfpkg.el ends here
