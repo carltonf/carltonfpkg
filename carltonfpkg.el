@@ -29,7 +29,7 @@
 ;; Personal collection of Elisp utilities.
 ;; Everything that is not configuration or a complete package goes here.
 ;;
-;; All should live under `cx-' namespace.
+;; All should live under `myi-' namespace. (my Intermediate)
 
 
 ;;; History:
@@ -232,7 +232,7 @@ directory), with prefix ARG, kill current buffer"
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; recentloc
-;;; 
+;;;
 ;;; If we need to jump around two places often, use marks `C-x C-x' and etc
 ;;;
 ;;; A much more powerful register-based location jumping mechanism.
@@ -322,28 +322,105 @@ start cycling.
                 (setq unread-command-events (list last-input-event)))))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; enhanced shell
+;;; enhanced shell/consoles/repls
 ;;;
-(defun my-debug-shell (&optional arg)
-  (interactive "P")
-  (let ((debug-shell-name "*debug-shell*")
-        (new-default-directory default-directory))
-    ;; make sure the new debug-shell always shows up in another window.
-    (unless (eq (current-buffer) (get-buffer debug-shell-name))
-      (switch-to-buffer-other-window debug-shell-name))
-    (shell debug-shell-name)
-    (when arg
-      (process-send-string debug-shell-name
-                           (concat "cd " new-default-directory " ; \\")) ; lined with `dirs'
-      (shell-resync-dirs))))
+(defvar myi-debug-shell-name "*debug-shell*"
+  "Workhorse in-Emacs shell.")
+(defvar myi-extra-shell-name "*extra-shell*"
+  "A secondary in-Emacs shell")
 
-(defun extra-shell ()
+(defun myi-extended-shell-resync-dirs ()
+  "If there is other windows in current frame, then change
+shell's current directory to the `default-directory' of the
+buffer of the `previous-window'. This serves as a replacement of
+the original `shell-resync-dirs'."
   (interactive)
-  "An extra Emacs shell."
-  (let ((extra-shell "*extra-shell*"))
-    (unless (eq (current-buffer) (get-buffer extra-shell))
-       (switch-to-buffer-other-window extra-shell))
-     (shell extra-shell)))
+  (let (new-curdir)
+    (when (> (length (window-list)) 1)
+      (setq new-curdir (with-selected-window (previous-window)
+                         default-directory))
+      (process-send-string (current-buffer)
+                           ;; lined with `dirs'
+                           (concat "cd " new-curdir " ; \\"))))
+  (shell-resync-dirs))
+
+(defcustom myi-console-mode-user-list nil
+  "User-defined console list to be included in `myi-consoles' in
+  addition to `myi-console-mode-list'. The value should be a list
+  of major mode symbols.")
+
+(defvar myi-console-mode-list '(shell-mode eshell-mode)
+  "Default list of modes whose buffers are included in
+`myi-consoles'. On switching a list of console buffers will be
+constructed so that there is no separate console list, only
+console mode list.")
+(defvar myi-console-buffer-history nil
+  "`myi-consoles' console selection history.")
+
+(defcustom myi-console-autostarts (list (cons myi-debug-shell-name #'shell)
+                                        (cons myi-extra-shell-name #'shell)
+                                        ;; `eshell' ARG works different from `shell's
+                                        (cons "*eshell*" (lambda (ignore) (eshell))))
+  "Association list of autostart consoles. The elements of the
+  list should be a CONS of format (BUFNAME . FUNC), of which FUNC
+  will be passed with BUFNAME only.")
+
+(defun myi-consoles (&optional prompt-choices)
+  "An all-in-one command for all interactive buffers, i.e.
+various REPL buffers, `eshell', `shell' buffers. With no
+argument, switch to last visited console. If the current buffer
+is already one of the consoles, prompt to open another console
+in current window."
+  (interactive "P")
+  (let* ((console-mode-full-list (append myi-console-mode-list
+                                         myi-console-mode-user-list))
+         console-buffer-list
+         (last-console-choice (car myi-console-buffer-history))
+         ;; default to the last chosen
+         (console-choice last-console-choice)
+         ;; nil if not, t o/w
+         (is-in-console (member major-mode console-mode-full-list)))
+    (when (or prompt-choices
+              (null myi-console-buffer-history)
+              is-in-console)
+      (mapc (lambda (buf)
+              (if (and (member (buffer-local-value 'major-mode buf)
+                               console-mode-full-list))
+                  (add-to-list 'console-buffer-list
+                               (buffer-name buf)
+                               ;; appending
+                               t)))
+            (buffer-list))
+      ;; autostarts
+      (mapc (lambda (buf-func-pair)
+              (add-to-list 'console-buffer-list
+                           (car buf-func-pair) t))
+            myi-console-autostarts)
+      ;; while in a console already, change default to the one before the last.
+      (when is-in-console
+        (setq last-console-choice (cadr myi-console-buffer-history)))
+      (setq console-choice
+            (ido-completing-read "Console: "
+                                 console-buffer-list
+                                 nil t nil 'myi-console-buffer-history
+                                 ;; make the last selected one the default
+                                 last-console-choice)))
+    (let ((console-buffer (get-buffer console-choice)))
+      (unless (eq (current-buffer) console-buffer)
+        ;; only popup other window when NOT in a console
+        (funcall (if is-in-console
+                     #'switch-to-buffer
+                   #'switch-to-buffer-other-window) console-choice)
+        ;; also bury last visited console buffer, since a switch within a
+        ;; console usually means a mistake in the first, so don't mangle the
+        ;; buffer list.
+        (if is-in-console
+            (bury-buffer (other-buffer)))
+        ;; handle autostart buffers `switch-to-buffer-other-window' will create
+        ;; non-existent buffer.
+        (if (not console-buffer)
+            (funcall (cdr (assoc console-choice myi-console-autostarts))
+                     console-choice))))))
 
 ;;; custom shells
 ;;; A template, which can be used for almost every kind of shells.
@@ -390,7 +467,9 @@ start cycling.
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; enhanced doc lookup
-;;; 
+;;;
+(require 'man)
+
 (defun myi-list-opened-man-buffers ()
   "Return a list of opened man page buffers."
   (let ((man-buf-list))
@@ -413,8 +492,13 @@ input into `Man-topic-history'.)"
   ;; lose the definition of `man-buf'
   ;;
   ;; TODO eliminate the needs of timer.
-  (lexical-let* ((man-args
-                  (ido-completing-read "Man Entry: " Man-topic-history))
+  (lexical-let* ((man-def (Man-default-man-entry))
+                 (man-args
+                  (ido-completing-read "Man Entry: " Man-topic-history
+                                       nil nil nil nil
+                                       (if (member man-def Man-topic-history)
+                                           man-def
+                                         nil)))
                  (man-buf (cond ((or (null man-args)
                                      (not (member man-args Man-topic-history)))
                                  ;; add to history for `M-p' completion, will
@@ -446,20 +530,105 @@ consider text properties."
                            "\\([A-Za-z/-]+\\)"
                            ".*\n+"
                            (make-string 9 32)) 1))))
-(add-hook 'Man-mode-hook #'my-man-imenu-regex-expressions)
+
+;;; Info Mode Enhancement
+
+(defun myi-info-mode-create-imenu-index ()
+  "Create an `Imenu' index, for _current node only_."
+  (goto-char Info-node-boundary-max)
+  (let (current-node-imenu-index
+        (idx-pattern "^ -- \\([_[:alnum:]]+\\): \\([-_[:alnum:]]+\\)")
+        idx-type
+        idx-name
+        idx-marker-entry
+        type-list)
+    (while (re-search-backward idx-pattern Info-node-boundary-min t)
+      (setq idx-type (match-string-no-properties 1)
+            idx-name (match-string-no-properties 2)
+            idx-marker-entry (cons idx-name (point-marker)))
+      (if (setq type-list (assoc idx-type current-node-imenu-index))
+          (setf (cdr type-list)
+                (cons idx-marker-entry (cdr type-list)))
+        (add-to-list 'current-node-imenu-index
+                     (list idx-type idx-marker-entry))))
+    current-node-imenu-index))
+
+(defun myi-info-mode-setup-imenu ()
+  "Setup a simple Imenu for info mode"
+  (interactive)
+  (setq imenu-create-index-function
+        #'myi-info-mode-create-imenu-index))
+
+(add-hook 'Info-mode-hook #'myi-info-mode-setup-imenu)
+
+(defvar Info-node-boundary-min nil
+  "Minimum buffer position of current node content.")
+(defvar Info-node-boundary-max nil
+  "Maximum buffer position of current node content.")
+
+(defadvice Info-goto-node (after myi-info-mode-record-node-boundaries)
+  (setq Info-node-boundary-min (point-min)
+        Info-node-boundary-max (point-max)))
+(ad-activate #'Info-goto-node)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; enhanced utility buffers
-;;; 
+;;;
 ;; This leads to default *scratch* buffer, used for non-important scratch
-(defun my-scratch-switch (&optional is-text)
-  "Fast switch to *scratch-text* buffer, a fundamental
-buffer. With prefix argument, switch to *scratch* buffer, the
-original Lisp Interaction Buffer."
-  (interactive "P")
-  (if is-text
-      (switch-to-buffer (get-buffer-create "*scratch-text*"))
-    (switch-to-buffer "*scratch*")))
+(require 'ido)
+
+(defvar myi-auxiliary-buffer-list '("*scratch*" "*scratch-text*")
+  "List of auxiliary buffers, which can be easily accessed
+through `myi-auxiliary-buffers-switch'. New buffers can also be
+added by using `myi-auxiliary-buffer-add/remove-the-current'.")
+
+(defvar myi-auxiliary-buffer-history nil
+  "Auxiliary buffer selection history.")
+
+(defun myi-auxiliary-buffers-switch (&optional add-remove)
+  "Fast switch to one buffer in `myi-auxiliary-buffer-list'.
+If the current buffer is one of the buffers, try to switch to
+another one with `ido' prompt.
+
+ADD-REMOVE - negative, remove the current buffer from auxiliary
+list. Otherwise, add the current buffer into auxiliary list."
+  (interactive "p")                     ;add-remove shall be 1, if omitted
+  (if (not (eq add-remove 1))
+      (myi-auxiliary-buffer-add/remove-the-current add-remove)
+    (let* ((is-auxiliary-buffer (member (buffer-name (current-buffer))
+                                        myi-auxiliary-buffer-list))
+           (last-aux-buf (car myi-auxiliary-buffer-history))
+           (last-2nd-aux-buf (cadr myi-auxiliary-buffer-history))
+           (aux-chosen-buffer last-aux-buf))
+      (when (or is-auxiliary-buffer
+                (null myi-auxiliary-buffer-history))
+        ;; TODO `ido-completing-read' will damage CHOICES list in
+        ;; `ido-make-choice-list' if DEF is not nil. I think this is a bug, but
+        ;; here is a workaround.
+        (setq aux-chosen-buffer (ido-completing-read "Auxiliaries: "
+                                                     (copy-tree myi-auxiliary-buffer-list)
+                                                     nil t nil 'myi-auxiliary-buffer-history
+                                                     last-2nd-aux-buf)))
+      ;; create the buffer if does not existed
+      (switch-to-buffer (get-buffer-create aux-chosen-buffer))
+      ;; don't fill the buffer list with auxiliary buffers.
+      (when is-auxiliary-buffer
+        (bury-buffer (other-buffer))))))
+
+(defun myi-auxiliary-buffer-add/remove-the-current (arg)
+  "Interactively add current buffer to
+`myi-auxiliary-buffer-history', with negative Prefix, remove the
+current buffer."
+  (let ((current-buf-name (buffer-name (current-buffer))))
+    (if (< arg 0)
+        (progn (setq myi-auxiliary-buffer-list
+                     (delete current-buf-name myi-auxiliary-buffer-list))
+               (setq myi-auxiliary-buffer-history
+                     (delete current-buf-name myi-auxiliary-buffer-history))
+               (message "Remove %s from auxiliaries" current-buf-name))
+      (add-to-list 'myi-auxiliary-buffer-list current-buf-name)
+      (add-to-history 'myi-auxiliary-buffer-history current-buf-name)
+      (message "Add %s to auxiliaries" current-buf-name))))
 
 (defun my-quickly-take-notes  (beg end)
   "Quicly save text in the region to *scratch-text*"
@@ -524,13 +693,6 @@ Uses `current-date-format' for the formatting the date/time."
 ;;; enhanced `recentf'
 (require 'recentf)
 
-(defun ido-recentf-open ()
-  "Use `ido-completing-read' to \\[find-file] a recent file"
-  (interactive)
-  (if (find-file (ido-completing-read "Find recent file: " recentf-list))
-      (message "Opening file...")
-    (message "Aborting")))
-
 ;;; enable recentf support for dired directory.
 (defun recentf-add-dired-directory ()
   "Add dired directory into recentf history. Note that this will
@@ -538,7 +700,6 @@ not record multiple-directory dired buffer case."
   (when (and (stringp dired-directory)
              (equal "" (file-name-nondirectory dired-directory)))
     (recentf-add-file dired-directory)))
-(add-hook 'dired-mode-hook 'recentf-add-dired-directory)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Enhanced Editing
@@ -576,7 +737,7 @@ copying/pasting."
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; misc utilities
-;;; 
+;;;
 (defun my-find-quoted-string-in-buffer (criterion &optional description)
   "Find quoted strings (quoted with \" or \') that satisfies
   CRITERION, which is a function that accepts a single string as
@@ -680,9 +841,66 @@ sequence of words."
       (insert "\n#+END_SRC\n")
       (kill-new (buffer-string)))))
 
+(defun myi-calibre-path-to-org-link (query-str)
+  "This function returns an Org-link by invoking 'calibredb
+--formats -s title:<QUERY-STR>'.
+
+NOTE: This is really primitive function. You should make sure the
+query string is valid and yield one result by using external
+command line tool 'calibredb'. Otherwise, this function will not
+get correct Org link."
+  (interactive "sCalibre Query String: ")
+  (let ((info-buffer "*Calibre-Org-Link Result*")
+        raw-info
+        book-path
+        book-description
+        (is-parsing-correct nil))
+    (with-current-buffer (get-buffer-create info-buffer)
+      (call-process "/usr/bin/calibredb" nil t nil
+                    "list" "-f" "formats" "--search"
+                    (format "title:\"%s\"" query-str))
+      ;; parsing
+      (goto-char (point-min))
+      ;; (search-forward-regexp "\\[\\(/.+[^],]+\\)/\\([^],]+\\)[],]")
+      (search-forward-regexp "\\[\\(/.+[^],]+\\)[],]")
+      (setq raw-info (buffer-substring (point-min) (point-max))
+            book-path (file-name-directory (match-string 1))
+            book-description (file-name-base (match-string 1)))
+      ;; sanitize path&description strings
+      (cl-flet ((sanitize-path-and-descrip
+                 (str)
+                 ;; trim the start of the string
+                 (setq str (replace-regexp-in-string "^[ \t]*" "" str))
+                 ;; trim the end of the string
+                 (setq str (replace-regexp-in-string "[ \t]*$" "" str))
+                 ;; replace line breaking with single white space
+                 (setq str (replace-regexp-in-string "[\n\r]" " " str))
+                 ;; collapse whitespace
+                 (setq str (replace-regexp-in-string "[ \t][ \t]+" " " str))))
+        (setq book-path (sanitize-path-and-descrip book-path))
+        (setq book-description (sanitize-path-and-descrip book-description)))
+
+      ;; append parsing result to this buffer
+      (goto-char (point-max))
+      (insert (format "%s\n" (make-string 31 ?#))
+              (format "Query Title: %s\n" query-str)
+              (format "Path: %s\n" book-path)
+              (format "Description: %s\n" book-description)))
+
+    ;; wait for user confirmation
+    (let ((prev-windows-conf (current-window-configuration)))
+      (switch-to-buffer-other-window info-buffer)
+      (setq is-parsing-correct
+            (y-or-n-p "Is the parsing correct? Y to insert the link at current point."))
+      ;; in case of incorrectness, give the use a chance to change
+      (when is-parsing-correct
+        (set-window-configuration prev-windows-conf)
+        (org-insert-link nil book-path book-description)
+        (kill-buffer info-buffer)))))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Enhanced Emacs Configuration Helper
-;;; 
+;;;
 ;; helper functions to locate key Emacs directory/files
 (defvar myi-emacs-key-pos
   '("~/.icrepos/emacs-custom-lisp-repos/"
