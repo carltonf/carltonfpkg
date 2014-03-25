@@ -915,6 +915,46 @@ get correct Org link."
     (dired key-pos)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; sdcv enhancer, to interact with outside world.
+;;;
+;;; TODO integrate into sdcv
+
+;;; TODO make the following variables part of a library 
+(defvar sdcv-lookup-frame-name "*sdcv-lookup-frame*"
+  "The name of a separate frame for sdcv looking up.")
+
+(defvar sdcv-lookup-frame nil
+  "The real frame object for `sdcv-lookup-frame-name'")
+
+;;; 1600x900
+(defun myi-sdcv-called-externally ()
+  (let ()
+    (select-frame-set-input-focus
+     (if (frame-live-p sdcv-lookup-frame)
+         sdcv-lookup-frame
+       (setq sdcv-lookup-frame
+             (make-frame
+              ;; `user-position'/`user-size' flags are needed
+              ;; width are exaggerated, the effect is to be maximum
+              ;; height is char size
+              `((name . ,sdcv-lookup-frame-name)
+                (top . (- 1)) (left . 0) (width . 180) (height . 10)
+                (user-position t) (user-size t)
+                (auto-raise . t))))))
+    ;; WM fiddling
+    (call-process "/usr/bin/wmctrl" nil nil nil
+                    "-r" sdcv-lookup-frame-name "-b" "add,above")
+    (call-process "/usr/bin/wmctrl" nil nil nil
+                  "-a" sdcv-lookup-frame-name)
+
+    ;; do sdcv query in the selected frame
+    (setq sdcv-started-externally-from t)
+    ;; (sdcv-goto-sdcv)
+    ;; (sticky-window-delete-other-windows)
+    (sdcv-search)))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Emacs/Elisp development helper
 ;;;
 
