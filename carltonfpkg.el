@@ -914,6 +914,23 @@ get correct Org link."
                                       myi-emacs-key-pos)))
     (dired key-pos)))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Emacs/Elisp development helper
+;;;
+
+(defun myi-add-this-to-load-path (&optional path)
+  "Invoke this command to add CWD of the current buffer to
+`load-path', ease the development."
+  (interactive)
+  (let ((cwd-path default-directory))
+    (if cwd-path
+        (when (y-or-n-p (format "Add [%s] to 'load-path' ?"
+                                cwd-path))
+          (add-to-list 'load-path cwd-path)
+          (message (format "Add [%s] to 'load-path'." cwd-path)))
+        (error "No CWD set for the buffer."))))
+
+;;; Tue Mar 25 11:03:23 CST 2014: deprecated in favor of simple symlink
 (defun myi-custom-lisp-dev-prep ()
   "Helper function to develop custom-lisp packages. Can only be
 used in `dired-mode'. Exchange the name of local custom lisp
