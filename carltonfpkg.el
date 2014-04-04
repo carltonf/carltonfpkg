@@ -854,48 +854,56 @@ get correct Org link."
         raw-info
         book-path
         book-description
-        (is-parsing-correct nil))
+        (is-parsing-correct nil)
+        ;; reset default directory temporarily if the current one doesn't exists
+        (default-directory (if (not (file-exists-p default-directory))
+                               "~/"
+                             default-directory)))
     (with-current-buffer (get-buffer-create info-buffer)
-      (call-process "/usr/bin/calibredb" nil t nil
-                    "list" "-f" "formats" "--search"
-                    (format "title:\"%s\"" query-str))
-      ;; parsing
-      (goto-char (point-min))
-      ;; (search-forward-regexp "\\[\\(/.+[^],]+\\)/\\([^],]+\\)[],]")
-      (search-forward-regexp "\\[\\(/.+[^],]+\\)[],]")
-      (setq raw-info (buffer-substring (point-min) (point-max))
-            book-path (file-name-directory (match-string 1))
-            book-description (file-name-base (match-string 1)))
-      ;; sanitize path&description strings
-      (cl-flet ((sanitize-path-and-descrip
-                 (str)
-                 ;; trim the start of the string
-                 (setq str (replace-regexp-in-string "^[ \t]*" "" str))
-                 ;; trim the end of the string
-                 (setq str (replace-regexp-in-string "[ \t]*$" "" str))
-                 ;; replace line breaking with single white space
-                 (setq str (replace-regexp-in-string "[\n\r]" " " str))
-                 ;; collapse whitespace
-                 (setq str (replace-regexp-in-string "[ \t][ \t]+" " " str))))
-        (setq book-path (sanitize-path-and-descrip book-path))
-        (setq book-description (sanitize-path-and-descrip book-description)))
+      (unwind-protect
+          (progn
+            (call-process "/usr/bin/calibredb" nil t nil
+                          "list" "-f" "formats" "--search"
+                          (format "title:\"%s\"" query-str))
+            ;; parsing
+            (goto-char (point-min))
+            ;; (search-forward-regexp "\\[\\(/.+[^],]+\\)/\\([^],]+\\)[],]")
+            (search-forward-regexp "\\[\\(/.+[^],]+\\)[],]")
+            (setq raw-info (buffer-substring (point-min) (point-max))
+                  book-path (file-name-directory (match-string 1))
+                  book-description (file-name-base (match-string 1)))
+            ;; sanitize path&description strings
+            (cl-flet ((sanitize-path-and-descrip
+                       (str)
+                       ;; trim the start of the string
+                       (setq str (replace-regexp-in-string "^[ \t]*" "" str))
+                       ;; trim the end of the string
+                       (setq str (replace-regexp-in-string "[ \t]*$" "" str))
+                       ;; replace line breaking with single white space
+                       (setq str (replace-regexp-in-string "[\n\r]" " " str))
+                       ;; collapse whitespace
+                       (setq str (replace-regexp-in-string "[ \t][ \t]+" " " str))))
+              (setq book-path (sanitize-path-and-descrip book-path))
+              (setq book-description (sanitize-path-and-descrip book-description)))
 
-      ;; append parsing result to this buffer
-      (goto-char (point-max))
-      (insert (format "%s\n" (make-string 31 ?#))
-              (format "Query Title: %s\n" query-str)
-              (format "Path: %s\n" book-path)
-              (format "Description: %s\n" book-description)))
+            ;; append parsing result to this buffer
+            (goto-char (point-max))
+            (insert (format "%s\n" (make-string 31 ?#))
+                    (format "Query Title: %s\n" query-str)
+                    (format "Path: %s\n" book-path)
+                    (format "Description: %s\n" book-description))
 
-    ;; wait for user confirmation
-    (let ((prev-windows-conf (current-window-configuration)))
-      (switch-to-buffer-other-window info-buffer)
-      (setq is-parsing-correct
-            (y-or-n-p "Is the parsing correct? Y to insert the link at current point."))
-      ;; in case of incorrectness, give the use a chance to change
-      (when is-parsing-correct
-        (set-window-configuration prev-windows-conf)
-        (org-insert-link nil book-path book-description)
+            ;; wait for user confirmation
+            (let ((prev-windows-conf (current-window-configuration)))
+              (switch-to-buffer-other-window info-buffer)
+              (setq is-parsing-correct
+                    (y-or-n-p "Is the parsing correct? Y to insert the link at current point."))
+              ;; in case of incorrectness, give the use a chance to change
+              (when is-parsing-correct
+                (set-window-configuration prev-windows-conf)
+                (org-insert-link nil book-path book-description)
+                (kill-buffer info-buffer))))
+        ;; always clean up
         (kill-buffer info-buffer)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
