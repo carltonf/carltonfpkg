@@ -1015,6 +1015,32 @@ directory and link to custom lisp repo."
     (rename-file pkg-link-name pkg-name)
     (rename-file pkg-tmp-name pkg-link-name)))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; indirect narrowing
+;;; 
+
+;;; narrow-to-region-indirect-buffer
+(defun narrow-to-region-indirect-buffer (&optional name start end)
+  "Create a cloned indirect buffer and narrow the current region
+in the newly created buffer.
+
+With prefix argument, ask for a name otherwise automatically use
+the region point for name."
+  (interactive (list (generate-new-buffer-name
+                      (let ((auto-name
+                             (concat (buffer-name)
+                                     (format "<-%d:%d->"
+                                             (region-beginning) (region-end)))))
+                        (if current-prefix-arg
+                            (read-string "Name for the indirected narrowed buffer: ")
+                          auto-name)))
+                     (region-beginning) (region-end)))
+  (with-current-buffer (clone-indirect-buffer 
+                        name
+                        'display)
+    (narrow-to-region start end)
+    (deactivate-mark)
+    (goto-char (point-min))))
 
 (provide 'carltonfpkg)
 ;;; carltonfpkg.el ends here
