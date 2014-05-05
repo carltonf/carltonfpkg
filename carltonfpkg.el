@@ -841,6 +841,25 @@ sequence of words."
       (insert "\n#+END_SRC\n")
       (kill-new (buffer-string)))))
 
+(defun org-insert-source-block-and-edit (language)
+  "A helper function to insert a source block."
+  (interactive (list (ido-completing-read "Language: "
+                                          ;; manual list of commonly used modes
+                                          '("emacs-lisp"
+                                            "shell-script"
+                                            "python"
+                                            "ruby"
+                                            ;; non-code mode
+                                            "text"
+                                            "diff"))))
+  (indent-according-to-mode)
+  (insert (format "#+BEGIN_SRC %s" language))
+  (newline-and-indent)
+  (save-excursion
+    (insert "#+END_SRC")
+    (newline-and-indent))
+  (org-edit-src-code))
+
 (defun myi-calibre-path-to-org-link (query-str)
   "This function returns an Org-link by invoking 'calibredb
 --formats -s title:<QUERY-STR>'.
