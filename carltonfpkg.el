@@ -1061,5 +1061,63 @@ the region point for name."
     (deactivate-mark)
     (goto-char (point-min))))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; general functionality extension
+(defun princ-to-string (arg)
+  "Return a string containing the printed representation of
+OBJECT, like princ."
+  (with-temp-buffer
+    (princ arg (current-buffer))
+    (buffer-string)))
+
+;; (with-ert-expectations
+;;  (expect "3.1415"
+;;    (princ-to-string 3.1415))
+;;  (expect "hello"
+;;    (princ-to-string "hello")))
+
+(defun s-concat* (&rest args)
+  "An JavaScript-like string addition that automatically converts
+  non-string into string."
+  (mapconcat #'princ-to-string args ""))
+(defalias 's-+ #'s-concat*)
+
+;; (with-ert-expectations
+;;  (expect "I love you."
+;;      (s-concat* "I " "love " "you."))
+;;  (expect "is 42"
+;;    (s-concat* "is " 42))
+;;  (expect "is 42"
+;;    (s-+ "is " 42)))
+
+(defun s-mapconcat* (func sequence &optional separator)
+  (setq separator (or separator ""))
+  (mapconcat func (mapcar #'princ-to-string
+                          sequence)
+             separator))
+
+;; (with-ert-expectations
+;;  (expect "2014-6-6"
+;;    (s-mapconcat* #'identity '(2014 6 6) "-"))
+;;  (expect "19:9:14:3434"
+;;    (s-mapconcat* #'identity '(19 9 14 3434) ":")))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Enhance paredit
+(defun my-comment-sexp-dwim ()
+  "Comment/Uncomment the sexp at point. Should be part of the
+`paredit-comment-dwim'
+
+Also note, this function uses changed `er/mark-comment-block'"
+  (interactive)
+  (save-excursion
+    (setq transient-mark-mode t)
+    (if (or (er--point-is-in-comment-p)
+            (looking-at "\\s *\\s<"))
+        (er/mark-comment-block)
+      (mark-sexp))
+    (paredit-comment-dwim)
+    (setq transient-mark-mode nil)))
+
 (provide 'carltonfpkg)
 ;;; carltonfpkg.el ends here
