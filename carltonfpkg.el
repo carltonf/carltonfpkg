@@ -1097,8 +1097,10 @@ OBJECT, like princ."
 
 (defun s-mapconcat* (func sequence &optional separator)
   (setq separator (or separator ""))
-  (mapconcat func (mapcar #'princ-to-string
-                          sequence)
+  (mapconcat (lambda (arg)
+               (princ-to-string
+                (funcall func arg)))
+             sequence
              separator))
 
 ;; (with-ert-expectations
