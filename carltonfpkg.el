@@ -1126,5 +1126,28 @@ Also note, this function uses changed `er/mark-comment-block'"
     (paredit-comment-dwim)
     (setq transient-mark-mode nil)))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Enhanced Calc
+(defun number-to-string-radix (num &optional to-radix)
+  "Extended `number-to-string', so it accepts RADIX argument to
+output number in that TO-RADIX. TO-RADIX is default to 10 if it's
+omitted.
+
+NOTE: this implementation uses `calc-bin' and thus TO-RADIX can
+only be from 2-36 as in `calc-number-radix'."
+  (require 'calc-bin)
+  (if to-radix
+      (let ((calc-number-radix to-radix))
+        (math-format-radix num))
+   (number-to-string num)))
+
+;; (with-ert-expectations
+;;   (expect "AFFC"
+;;     (number-to-string-radix 45052 16))
+;;   (expect "10"
+;;     (number-to-string-radix 10))
+;;   (expect "1100"
+;;       (number-to-string-radix 12 2)))
+
 (provide 'carltonfpkg)
 ;;; carltonfpkg.el ends here
