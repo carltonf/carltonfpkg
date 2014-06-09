@@ -852,13 +852,18 @@ sequence of words."
                                             ;; non-code mode
                                             "text"
                                             "diff"))))
-  (indent-according-to-mode)
-  (insert (format "#+BEGIN_SRC %s" language))
-  (newline-and-indent)
-  (save-excursion
-    (insert "#+END_SRC")
-    (newline-and-indent))
-  (org-edit-src-code))
+  ;; (indent-according-to-mode)
+  (let (org-src-block-template-macro)
+    (fset 'org-src-block-template-macro
+          (lambda (&optional arg)
+            "Insert a source code block in Org, utilizing Org's
+             own template system."
+            (interactive "p")
+            (kmacro-exec-ring-item (quote ("<s	" 0 "%d")) arg)))
+    (org-src-block-template-macro)
+    (insert language)
+    (forward-line)
+    (org-edit-src-code)))
 
 (defun myi-calibre-path-to-org-link (query-str)
   "This function returns an Org-link by invoking 'calibredb
@@ -1104,7 +1109,7 @@ OBJECT, like princ."
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Enhance paredit
-(defun my-comment-sexp-dwim ()
+(defun my-comment-or-uncomment-sexp-dwim ()
   "Comment/Uncomment the sexp at point. Should be part of the
 `paredit-comment-dwim'
 
