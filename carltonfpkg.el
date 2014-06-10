@@ -655,39 +655,38 @@ current buffer."
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Enhanced Time/Date
+;;; A pure elisp alternative to  "C-u M-! date"
+(defvar common-current-time-formats
+  '(("Date and time" . "%b-%d-%Y %H:%M:%S %Z")
+    ("Only date" . "%b-%d-%Y")
+    ("Date with weekday" . " %a %b-%d-%Y")
+    ("Only time" . "%H:%M:%S")
+    ("Time with timezone" . "%H:%M:%S %Z"))
+  "An association list. Several commonly used format of date and
+time to be used with `insert-current-date-time'. See `format-time-string' for other
+choices.
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; insert date and time
-;;; NOTE: though `C-uM-! date' is good, but I want a portable version,
-;;; so I can do this on windows too.
-(defvar current-date-time-format "%a %b %d %H:%M:%S %Z %Y"
-  "Format of date to insert with `insert-current-date-time' func
-See help of `format-time-string' for possible replacements")
+NOTE: The first format is hard-coded as default.")
 
-(defvar current-date-format "%a %b %d %Z %Y"
-  "Format of date to insert with `insert-current-date' func
-See help of `format-time-string' for possible replacements")
-
-(defvar current-time-format "%H:%M:%S"
-  "Format of date to insert with `insert-current-time' func.
-Note the weekly scope of the command's precision.")
-
-(defun insert-current-date-time ()
-  "insert the current date and time into current buffer.
-Uses `current-date-time-format' for the formatting the date/time."
-       (interactive)
-       (insert (format-time-string current-date-time-format (current-time))))
-
-(defun insert-current-date ()
-  "insert the current date into current buffer.
-Uses `current-date-format' for the formatting the date/time."
-       (interactive)
-       (insert (format-time-string current-date-format (current-time))))
-
-(defun insert-current-time ()
-  "insert the current time (1-week scope) into the current buffer."
-       (interactive)
-       (insert (format-time-string current-time-format (current-time))))
+(defun insert-current-time (&optional select)
+  "Insert the current time at the cursor point.
+With SELECT, prompt user to select a date format from
+`common-current-time-formats'. Otherwise, the first format in
+`common-current-time-formats' is used."
+  (interactive "P")
+  (let* ((format-names (assoc-keys common-current-time-formats))
+         (formats (assoc-values common-current-time-formats))
+         (default-choice (car format-names))
+         (default-format (car formats))
+         (format
+          (if select
+              (cdr (assoc (ido-completing-read "Format: "
+                                               format-names
+                                               nil t nil nil
+                                               (car format-names))
+                          common-current-time-formats))
+            default-format)))
+    (insert (format-time-string format))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; enhanced `recentf'
