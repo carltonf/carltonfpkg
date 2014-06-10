@@ -1211,5 +1211,20 @@ property list."
 ;;   (expect nil
 ;;     (plist-values nil)))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Enhanced `simple.el'
+(defun back-to-indentation-dwim (&optional arg)
+  "Smarter `back-to-indentation' command that back to the start
+of meaningful text:
+
+1. in comments, instead of comment starters, move to the start of
+commented text."
+  (interactive "^")
+  (if (or (er--point-is-in-comment-p)
+          (looking-at "\\s *\\s<"))
+      (comment-beginning)
+    (back-to-indentation)))
+(global-set-key  (kbd "M-m") #'back-to-indentation-dwim)
+
 (provide 'carltonfpkg)
 ;;; carltonfpkg.el ends here
