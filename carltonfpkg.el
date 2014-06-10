@@ -1149,5 +1149,68 @@ only be from 2-36 as in `calc-number-radix'."
 ;;   (expect "1100"
 ;;       (number-to-string-radix 12 2)))
 
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Extra List facilities
+(defun assoc-keys (alist)
+  "Convenient function to extract all keys into a list from an
+associate list."
+  (mapcar #'car alist))
+
+;; (with-ert-expectations
+;;   (expect '(pine oak maple)
+;;     (assoc-keys '((pine . cones)
+;;                   (oak . acorns)
+;;                   (maple . seeds))))
+;;   (expect '(a "b")
+;;     (assoc-keys '((a . 1) ("b" 2 3))))
+;;   (expect nil
+;;     (assoc-keys nil)))
+
+(defun assoc-values (alist)
+  "Convenient function to extract all values into a list from an
+associate list."
+  (mapcar #'cdr alist))
+
+;; (with-ert-expectations
+;;   (expect '(cones acorns seeds)
+;;     (assoc-values '((pine . cones)
+;;                   (oak . acorns)
+;;                   (maple . seeds))))
+;;   (expect '(1 (2 3))
+;;     (assoc-values '((a . 1) ("b" 2 3))))
+;;   (expect nil
+;;     (assoc-values nil)))
+
+(defun plist-keys (plist)
+  "Convenient function to extract all keys into a list from an
+property list."
+  (loop while plist
+        collect (car plist)
+        do (setq plist (cddr plist))))
+
+;; (with-ert-expectations
+;;   (expect '(pine numbers color)
+;;    (plist-keys '(pine cones numbers (1 2 3) color "blue")))
+;;   (expect '(bar foo quux)
+;;    (plist-keys '(bar t foo 69 quux (a))))
+;;   (expect nil
+;;     (plist-keys nil)))
+
+(defun plist-values (plist)
+  "Convenient function to extract all values into a list from an
+property list."
+  (loop while plist
+        collect (cadr plist)
+        do (setq plist (cddr plist))))
+
+;; (with-ert-expectations
+;;   (expect '(cones (1 2 3) "blue")
+;;    (plist-values '(pine cones numbers (1 2 3) color "blue")))
+;;   (expect '(t 69 (a))
+;;    (plist-values '(bar t foo 69 quux (a))))
+;;   (expect nil
+;;     (plist-values nil)))
+
 (provide 'carltonfpkg)
 ;;; carltonfpkg.el ends here
