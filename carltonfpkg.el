@@ -874,20 +874,43 @@ command line tool 'calibredb'. Otherwise, this function will not
 get correct Org link."
   (interactive "sCalibre Query String: ")
   (let ((info-buffer "*Calibre-Org-Link Result*")
+        book-id
         raw-info
         book-path
         book-description
-        (is-parsing-correct nil)
         ;; reset default directory temporarily if the current one doesn't exists
         (default-directory (if (not (file-exists-p default-directory))
                                "~/"
                              default-directory)))
-    (with-current-buffer (get-buffer-create info-buffer)
-      (unwind-protect
-          (progn
+    (unwind-protect
+        (progn
+          (with-current-buffer  (get-buffer-create info-buffer)
+            (let (completion-collection)
+              (call-process "/usr/bin/calibredb" nil t nil
+                            "list" "--search" query-str)
+              ;; collect numeric ids
+              (save-excursion
+                (goto-char (point-min))
+                (while (search-forward-regexp
+                        "^\\(\\<[[:digit:]]+\\>\\)" nil t)
+                  (push (match-string 1) completion-collection))
+                (setq completion-collection
+                      (nreverse completion-collection)))
+              (unless completion-collection
+                (error (format "Empty result: Abort! Your query is (%s)"
+                               query-str)))
+              (save-window-excursion
+                (display-buffer info-buffer nil)
+                (setq book-id
+                      (string-to-number
+                       (ido-completing-read "Input the ID of the book: "
+                                            completion-collection
+                                            nil t))))
+              (erase-buffer))
+            
             (call-process "/usr/bin/calibredb" nil t nil
                           "list" "-f" "formats" "--search"
-                          (format "title:\"%s\"" query-str))
+                          (format "id:\"%d\"" book-id))
             ;; parsing
             (goto-char (point-min))
             ;; (search-forward-regexp "\\[\\(/.+[^],]+\\)/\\([^],]+\\)[],]")
@@ -914,20 +937,13 @@ get correct Org link."
             (insert (format "%s\n" (make-string 31 ?#))
                     (format "Query Title: %s\n" query-str)
                     (format "Path: %s\n" book-path)
-                    (format "Description: %s\n" book-description))
-
-            ;; wait for user confirmation
-            (let ((prev-windows-conf (current-window-configuration)))
-              (switch-to-buffer-other-window info-buffer)
-              (setq is-parsing-correct
-                    (y-or-n-p "Is the parsing correct? Y to insert the link at current point."))
-              ;; in case of incorrectness, give the use a chance to change
-              (when is-parsing-correct
-                (set-window-configuration prev-windows-conf)
-                (org-insert-link nil book-path book-description)
-                (kill-buffer info-buffer))))
-        ;; always clean up
-        (kill-buffer info-buffer)))))
+                    (format "Description: %s\n" book-description)))
+          ;; wait for user confirmation
+          (save-window-excursion
+            (display-buffer info-buffer nil)
+              (org-insert-link nil book-path book-description)))
+      ;; always clean up
+      (kill-buffer info-buffer))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Enhanced Emacs Configuration Helper
