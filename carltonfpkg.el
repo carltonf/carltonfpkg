@@ -892,8 +892,8 @@ get correct Org link."
               (save-excursion
                 (goto-char (point-min))
                 (while (search-forward-regexp
-                        "^\\(\\<[[:digit:]]+\\>\\)" nil t)
-                  (push (match-string 1) completion-collection))
+                        "^\\<[[:digit:]]+\\>" nil t)
+                  (push (match-string 0) completion-collection))
                 (setq completion-collection
                       (nreverse completion-collection)))
               (unless completion-collection
