@@ -39,6 +39,29 @@
 ;;; Code:
 (eval-when-compile (require 'cl))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Variables Definitions, put here at the very beginnings to avoid
+;;; compilation warnings
+;;; 
+(defvar common-current-time-formats
+  '(("Date and time" . "%b-%d-%Y %H:%M:%S %Z")
+    ("Only date" . "%b-%d-%Y")
+    ("Date with weekday" . " %a %b-%d-%Y")
+    ("Only time" . "%H:%M:%S")
+    ("Time with timezone" . "%H:%M:%S %Z"))
+  "An association list. Several commonly used format of date and
+time to be used with `insert-current-date-time'. See `format-time-string' for other
+choices.
+
+NOTE: The first format is hard-coded as default.")
+
+(defvar Info-node-boundary-min nil
+  "Minimum buffer position of current node content.")
+(defvar Info-node-boundary-max nil
+  "Maximum buffer position of current node content.")
+
+
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Enhanced Buffer Management
 ;;;
@@ -241,6 +264,8 @@ directory), with prefix ARG, kill current buffer"
 ;;; 1. nice listing of recorded locations with context
 ;;; 2. maybe we could enhance f10 like this too
 ;;; 3. Move out as a separate library
+(require 'ring)
+
 (defconst my-recentloc-ring-size 13
   "The maximum size of the `my-recentloc-ring'.")
 
@@ -271,7 +296,7 @@ start cycling.
 
 `hl-line-mode' is temporarily enabled when you are cycling."
   (interactive "P")
-  (flet ((goto-marker (marker)
+  (cl-flet ((goto-marker (marker)
                       (if (markerp marker)
                           (progn
                             (switch-to-buffer (marker-buffer marker))
@@ -344,7 +369,7 @@ the original `shell-resync-dirs'."
                            (concat "cd " new-curdir " ; \\"))))
   (shell-resync-dirs))
 
-(defcustom myi-console-mode-user-list nil
+(defvar myi-console-mode-user-list nil
   "User-defined console list to be included in `myi-consoles' in
   addition to `myi-console-mode-list'. The value should be a list
   of major mode symbols.")
@@ -357,7 +382,7 @@ console mode list.")
 (defvar myi-console-buffer-history nil
   "`myi-consoles' console selection history.")
 
-(defcustom myi-console-autostarts (list (cons myi-debug-shell-name #'shell)
+(defvar myi-console-autostarts (list (cons myi-debug-shell-name #'shell)
                                         (cons myi-extra-shell-name #'shell)
                                         ;; `eshell' ARG works different from `shell's
                                         (cons "*eshell*" (lambda (ignore) (eshell))))
@@ -427,6 +452,13 @@ in current window."
 ;;! make the function below can define buffers like standard `shell'
 ;;! maybe we can write a function to ask what shell to execute similar
 ;; to the `term' but with predefined list to do auto-complete
+(require 'shell)
+
+(defvar explicit-pdl-args nil
+  "Used by `ipdl'")
+
+(defvar explicit-cpan-args nil
+  "Used by `icpan'")
 
 (defun ipdl (&optional buffer)
   "Internal PDL shell in emacs, directly use the Emacs Shell mode."
@@ -532,6 +564,8 @@ consider text properties."
                            (make-string 9 32)) 1))))
 
 ;;; Info Mode Enhancement
+(eval-when-compile
+  (require 'info))
 
 (defun myi-info-mode-create-imenu-index ()
   "Create an `Imenu' index, for _current node only_."
@@ -561,11 +595,6 @@ consider text properties."
 
 (add-hook 'Info-mode-hook #'myi-info-mode-setup-imenu)
 
-(defvar Info-node-boundary-min nil
-  "Minimum buffer position of current node content.")
-(defvar Info-node-boundary-max nil
-  "Maximum buffer position of current node content.")
-
 (defadvice Info-goto-node (after myi-info-mode-record-node-boundaries)
   (setq Info-node-boundary-min (point-min)
         Info-node-boundary-max (point-max)))
@@ -575,7 +604,8 @@ consider text properties."
 ;;; enhanced utility buffers
 ;;;
 ;; This leads to default *scratch* buffer, used for non-important scratch
-(require 'ido)
+(eval-when-compile
+  (require 'ido))
 
 (defvar myi-auxiliary-buffer-list '("*scratch*" "*scratch-text*")
   "List of auxiliary buffers, which can be easily accessed
@@ -634,15 +664,15 @@ current buffer."
   "Quicly save text in the region to *scratch-text*"
   (interactive "r")
   (let ((str (filter-buffer-substring beg end)))
-    (set-buffer (get-buffer-create "*scratch-text*"))
-    (goto-char (point-max))
-    ;; insert header
-    (insert "\n;;;; ---------------- "
-            (format-time-string current-time-format
-                                (current-time))
-            " ----------------\n")
-    (insert str)
-    (message "Quick Note saved.")))
+    (with-current-buffer (get-buffer-create "*scratch-text*")
+      (goto-char (point-max))
+      ;; insert header
+      (insert "\n;;;; ---------------- "
+              (format-time-string (cadar common-current-time-formats)
+                                  (current-time))
+              " ----------------\n")
+      (insert str)
+      (message "Quick Note saved."))))
 
 ;;; In light of `help-go-back' and `help-go-forward', I found it's super
 ;;; convenient to pop up help window. Also `with-help-window' macro is good for
@@ -656,18 +686,6 @@ current buffer."
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Enhanced Time/Date
 ;;; A pure elisp alternative to  "C-u M-! date"
-(defvar common-current-time-formats
-  '(("Date and time" . "%b-%d-%Y %H:%M:%S %Z")
-    ("Only date" . "%b-%d-%Y")
-    ("Date with weekday" . " %a %b-%d-%Y")
-    ("Only time" . "%H:%M:%S")
-    ("Time with timezone" . "%H:%M:%S %Z"))
-  "An association list. Several commonly used format of date and
-time to be used with `insert-current-date-time'. See `format-time-string' for other
-choices.
-
-NOTE: The first format is hard-coded as default.")
-
 (defun insert-current-time (&optional select)
   "Insert the current time at the cursor point.
 With SELECT, prompt user to select a date format from
@@ -756,9 +774,8 @@ TODO the current quoted string regexp is far from complete."
         (result-buf (get-buffer-create "*Find-Strings*")))
     ;; use relative path instead
     (setq file-name (file-relative-name file-name))
-    (save-excursion
-      (set-buffer result-buf)
-      (toggle-read-only -1)
+    (with-current-buffer result-buf
+      (read-only-mode 1)
       (erase-buffer)
       (insert (format "Find strings satisfy: %s\n" description)
               "---------------------------------------------\n"))
@@ -768,8 +785,7 @@ TODO the current quoted string regexp is far from complete."
         (let ((matched-str (substring (match-string-no-properties 1) 1 -1))
               (line-number (line-number-at-pos)))
           (if (funcall criterion matched-str)
-              (save-excursion
-                (set-buffer result-buf)
+              (with-current-buffer result-buf
                 (insert (format "%s:%d: len %d: %s\n"
                                 file-name line-number
                                 (length matched-str) matched-str)))))))
@@ -832,8 +848,8 @@ sequence of words."
     (with-temp-buffer
       (insert "#+BEGIN_SRC " cur-mode-name)
       ;; remove the ending "-mode"
-      (backward-kill-word 1)
-      (delete-backward-char 1)
+      (kill-word -1)
+      (delete-char 1)
       (insert "\n")
       ;; TODO insert marked region here
       (insert-buffer-substring-no-properties old-buffer BEG END)
@@ -974,6 +990,8 @@ get correct Org link."
   "The real frame object for `sdcv-lookup-frame-name'")
 
 ;;; 1600x900
+;; `sdcv-started-externally-from' is defined in `sdcv-mode'
+(defvar sdcv-started-externally-from)
 (defun myi-sdcv-called-externally ()
   (let ()
     (select-frame-set-input-focus
