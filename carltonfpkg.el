@@ -1204,9 +1204,11 @@ windows and ?O moving backward windows."
   (let ((oldwindow (selected-window))
         (window-num (length (window-list)))
         (step-other-window (lambda ()
+                             (hl-line-unhighlight)
                              (other-window (if (eq last-input-event ?o)
                                                1
-                                             -1)))))
+                                             -1))
+                             (let ((hl-line-mode t)) (hl-line-highlight)))))
     (funcall step-other-window)
     ;; in case of 3+ windows
     (when (> window-num 2)
@@ -1215,7 +1217,8 @@ windows and ?O moving backward windows."
          (?O . (funcall step-other-window)))
        "Switching forward(o)/backward(O) windowd..."
        nil
-       (select-window oldwindow t)))))
+       (select-window oldwindow t)
+       (hl-line-unhighlight)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Enhanced Calc
