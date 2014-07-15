@@ -504,13 +504,10 @@ in current window."
 
 (defun myi-list-opened-man-buffers ()
   "Return a list of opened man page buffers."
-  (let ((man-buf-list))
-    (mapc (lambda (curbuf)
-            (when (eq (buffer-local-value 'major-mode curbuf)
-                      'Man-mode)
-              (add-to-list 'man-buf-list (buffer-name curbuf))))
-          (buffer-list))
-    man-buf-list))
+  (loop for curbuf in (buffer-list)
+        if (eq (buffer-local-value 'major-mode curbuf)
+               'Man-mode)
+        collect (buffer-name curbuf)))
 
 (defun my-go-to-man ()
   "Go to man page by using ido to select entries in `Man-topic-history' first.
@@ -528,9 +525,8 @@ input into `Man-topic-history'.)"
                  (man-args
                   (ido-completing-read "Man Entry: " Man-topic-history
                                        nil nil nil nil
-                                       (if (member man-def Man-topic-history)
-                                           man-def
-                                         nil)))
+                                       (when (member man-def Man-topic-history)
+                                         man-def)))
                  (man-buf (cond ((or (null man-args)
                                      (not (member man-args Man-topic-history)))
                                  ;; add to history for `M-p' completion, will
