@@ -1205,11 +1205,9 @@ windows and ?O moving backward windows."
         (window-num (length (window-list)))
         (step-other-window (lambda ()
                              (hl-line-unhighlight)
-                             (other-window (if (eq last-input-event ?o)
-                                               1
-                                             -1))
+                             (other-window (if (eq last-input-event ?o) 1 -1))
                              (let ((hl-line-mode t)) (hl-line-highlight)))))
-    (funcall step-other-window)
+    (other-window (if (eq last-input-event ?o) 1 -1))
     ;; in case of 3+ windows
     (when (> window-num 2)
       (with-trivial-minor-mode
