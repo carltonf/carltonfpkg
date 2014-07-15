@@ -63,7 +63,8 @@ NOTE: The first format is hard-coded as default.")
 
 ;;;;;;;;;;;;;;;;
 ;;; Generic functionality
-(defmacro with-trivial-minor-mode (keymap msg &optional confirm-sexp cancel-sexp)
+(defmacro with-trivial-minor-mode (keymap msg
+                                   &optional confirm-sexp cancel-sexp exit-sexp)
   "Macro that defines a fake minor mode that temporarily enable KEYMAP globally.
 Any other key event would quit this special mode.
 
@@ -81,20 +82,25 @@ CONFIRM-SEXP, a sexp gets runs at confirmation, confirm key is
 hard-coded to Enter.
 
 CANCEL-SEXP, a sexp gets run at cancellation, cancel key is
-hard-coded to C-g."
-  `(let (last-key
-         (key-mapped-sexp t))
-     (while key-mapped-sexp
-       key-mapped-sexp
-       (message ,msg)
-       (setq key-mapped-sexp (cdr (assoc (read-key) ,keymap))))
-     (case last-input-event
-       (?\r                             ; confirmation
-        confirm-sexp)
-       (?\C-G                           ; cancel
-        cancel-sexp)
-       (otherwise                       ;replay whatever other keys
-        (setq unread-command-events (list last-input-event))))))
+hard-coded to C-g.
+
+UNWIND-SEXP, a sexp always gets run as in UNWINDFORMS in
+`unwind-protect'."
+  (let ((key-mapped-sexp (make-symbol "key-mapped-sexp")))
+    `(unwind-protect
+         (let ((,key-mapped-sexp t))
+           (while ,key-mapped-sexp
+             (eval ,key-mapped-sexp)
+             (message ,msg)
+             (setq ,key-mapped-sexp (cdr (assoc (read-key) ,keymap))))
+           (case last-input-event
+             (?\r                       ; confirmation
+              (eval ,confirm-sexp))
+             (?\C-G                     ; cancel
+              (eval ,cancel-sexp))
+             (otherwise                 ;replay whatever other keys
+              (setq unread-command-events (list last-input-event)))))
+       ,exit-sexp)))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -321,7 +327,7 @@ directory), with prefix ARG, kill current buffer"
     (ring-insert my-recentloc-ring cur-marker)
     (message "Push %s onto recentloc ring" cur-marker)))
 
-(defun my-recentloc-cycle-ring (&optional ARG)
+(defun my-recentloc-cycle-ring (&optional arg)
   "Cycle through `my-recentloc-ring'. Repeated
 `my-recentloc-cycling-key' jumps to older recorded locations. Any
 key other than `my-recentloc-cycling-key' will abort cycling. C-g
@@ -331,14 +337,15 @@ start cycling.
 
 `hl-line-mode' is temporarily enabled when you are cycling."
   (interactive "P")
-  (cl-flet ((goto-marker (marker)
-                      (if (markerp marker)
-                          (progn
-                            (switch-to-buffer (marker-buffer marker))
-                            (goto-char marker))
-                        nil)))
-    (cond (ARG
-           (unless (goto-marker my-cycling-start-marker)
+  (let ((goto-marker-func-with-hl
+         (lambda (marker)
+           (when (markerp marker)
+             (hl-line-unhighlight)
+             (switch-to-buffer (marker-buffer marker))
+             (goto-char marker)
+             (let ((hl-line-mode t)) (hl-line-highlight))))))
+    (cond (arg
+           (unless (funcall goto-marker-func-with-hl my-cycling-start-marker)
              (message "Abort: No start location of cycling.")))
           ((ring-empty-p my-recentloc-ring)
            (message "Abort: Recentloc has no records."))
@@ -347,39 +354,27 @@ start cycling.
            ;; A macro to enable hl-line mode only while cycling. It is used only
            ;; after you have switched to the desired buffer and should wrap
            ;; around time-consuming operations within that buffer.
-           (macrolet ((with-temp-hl-line
-                       (&rest body)
-                       `(let ((old-hl-line-mode hl-line-mode))
-                          (if (null (setq old-hl-line-mode hl-line-mode))
-                              (hl-line-mode))
-                          ,@body
-                          (if (null old-hl-line-mode) (hl-line-mode -1)))))
-             (let* ((recentloc-ring-len (ring-length my-recentloc-ring))
-                    (ring-idx 0)
-                    (cur-marker (ring-ref my-recentloc-ring ring-idx))
-                    (last-read-key my-recentloc-cycling-key))
-               (while (eq last-read-key my-recentloc-cycling-key)
-                 (if (= ring-idx recentloc-ring-len)
-                     ; stay in the same marker twice
-                     (progn (message "Recentloc cycle wrapping...")
-                            (setq ring-idx -1))
-                   (message "Recentloc cycling to %s..." cur-marker)
-                   (goto-marker cur-marker))
-                 (with-temp-hl-line
-                  (recenter)
-                  (setq ring-idx (1+ ring-idx))
-                  (setq cur-marker (ring-ref my-recentloc-ring ring-idx))
-                  (setq last-read-key (read-key))))))
-           ;; don't replay the last-input-event if it's return (which works as
-           ;; confirmation to terminate cycling)
-           (let ((last-input-event last-input-event))
-             (case last-input-event
-               (?\r nil)                ;won't replay enter
-               (?\C-G                   ;with canceling, go back where we start
+           (let* ((recentloc-ring-len (ring-length my-recentloc-ring))
+                  (ring-idx 0)
+                  (cur-marker (ring-ref my-recentloc-ring ring-idx)))
+             (funcall goto-marker-func-with-hl cur-marker)
+             (with-trivial-minor-mode
+              '((f12
+                 . (progn
+                     (if (= ring-idx recentloc-ring-len)
+                         ;; stay in the same marker twice for wrapping
+                         (progn (message "Recentloc cycle wrapping...")
+                                (setq ring-idx -1))
+                       (funcall goto-marker-func-with-hl cur-marker))
+                     (recenter)
+                     (setq ring-idx (1+ ring-idx))
+                     (setq cur-marker (ring-ref my-recentloc-ring ring-idx)))))
+              (format "Recentloc cycling to %s..." cur-marker)
+              nil
+              (progn
                 (switch-to-buffer (marker-buffer my-cycling-start-marker))
                 (goto-char my-cycling-start-marker))
-               (otherwise               ;replay whatever other keys
-                (setq unread-command-events (list last-input-event)))))))))
+              (hl-line-unhighlight)))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; enhanced shell/consoles/repls
