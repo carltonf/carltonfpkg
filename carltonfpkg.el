@@ -61,6 +61,41 @@ NOTE: The first format is hard-coded as default.")
   "Maximum buffer position of current node content.")
 
 
+;;;;;;;;;;;;;;;;
+;;; Generic functionality
+(defmacro with-trivial-minor-mode (keymap msg &optional confirm-sexp cancel-sexp)
+  "Macro that defines a fake minor mode that temporarily enable KEYMAP globally.
+Any other key event would quit this special mode.
+
+WARNING: for anything slightly more complex than several hotkeys,
+use minor mode instead.
+
+KEYMAP is an association list in the forms of ((key . sexp) ...),
+you might want to add a helper here for more complicated
+mappings.
+
+MSG is a message string in the mini-buffer that indicates the
+current state.
+
+CONFIRM-SEXP, a sexp gets runs at confirmation, confirm key is
+hard-coded to Enter.
+
+CANCEL-SEXP, a sexp gets run at cancellation, cancel key is
+hard-coded to C-g."
+  `(let (last-key
+         (key-mapped-sexp t))
+     (while key-mapped-sexp
+       key-mapped-sexp
+       (message ,msg)
+       (setq key-mapped-sexp (cdr (assoc (read-key) ,keymap))))
+     (case last-input-event
+       (?\r                             ; confirmation
+        confirm-sexp)
+       (?\C-G                           ; cancel
+        cancel-sexp)
+       (otherwise                       ;replay whatever other keys
+        (setq unread-command-events (list last-input-event))))))
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Enhanced Buffer Management
