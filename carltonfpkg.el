@@ -42,7 +42,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Variables Definitions, put here at the very beginnings to avoid
 ;;; compilation warnings
-;;; 
+;;;
 (defvar common-current-time-formats
   '(("Date and time" . "%b-%d-%Y %H:%M:%S %Z")
     ("Only date" . "%b-%d-%Y")
@@ -954,7 +954,7 @@ get correct Org link."
                                             completion-collection
                                             nil t))))
               (erase-buffer))
-            
+
             (call-process "/usr/bin/calibredb" nil t nil
                           "list" "-f" "formats" "--search"
                           (format "id:\"%d\"" book-id))
@@ -1013,7 +1013,7 @@ get correct Org link."
 ;;;
 ;;; TODO integrate into sdcv
 
-;;; TODO make the following variables part of a library 
+;;; TODO make the following variables part of a library
 (defvar sdcv-lookup-frame-name "*sdcv-lookup-frame*"
   "The name of a separate frame for sdcv looking up.")
 
@@ -1105,7 +1105,7 @@ directory and link to custom lisp repo."
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; indirect narrowing
-;;; 
+;;;
 
 ;;; narrow-to-region-indirect-buffer
 (defun narrow-to-region-indirect-buffer (&optional name start end)
@@ -1123,7 +1123,7 @@ the region point for name."
                             (read-string "Name for the indirected narrowed buffer: ")
                           auto-name)))
                      (region-beginning) (region-end)))
-  (with-current-buffer (clone-indirect-buffer 
+  (with-current-buffer (clone-indirect-buffer
                         name
                         'display)
     (narrow-to-region start end)
@@ -1189,6 +1189,38 @@ Also note, this function uses changed `er/mark-comment-block'"
       (mark-sexp))
     (paredit-comment-dwim)
     (setq transient-mark-mode nil)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Enhance window movement
+(defun myi-other-window ()
+  "A replacement for `other-window'.
+
+WARNING: This command should be bound with 'C-x o' and 'C-x O'
+and it acts differently for these two bindings. DON'T rebind this
+command to other keys, it WON'T work.
+
+'C-x o' moves forward as (other-window 1)
+'C-x O' moves backward as (other-window -1)
+
+For windows less than 3, it calls `other-window' directly.
+Otherwise, enters a fake minor mode, with ?o moving forward
+windows and ?O moving backward windows."
+  (interactive)
+  (let ((oldwindow (selected-window))
+        (window-num (length (window-list)))
+        (step-other-window (lambda ()
+                             (other-window (if (eq last-input-event ?o)
+                                               1
+                                             -1)))))
+    (funcall step-other-window)
+    ;; in case of 3+ windows
+    (when (> window-num 2)
+      (with-trivial-minor-mode
+       '((?o . (funcall step-other-window))
+         (?O . (funcall step-other-window)))
+       "Switching forward(o)/backward(O) windowd..."
+       nil
+       (select-window oldwindow t)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Enhanced Calc
