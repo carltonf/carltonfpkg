@@ -634,58 +634,88 @@ consider text properties."
 (eval-when-compile
   (require 'ido))
 
-(defvar myi-auxiliary-buffer-list '("*scratch*" "*scratch-text*")
+(defvar myi-auxiliary-buffer-alist '(("*scratch*")
+                                     ("*scratch-text*"
+                                      . (progn
+                                          (text-mode)
+                                          (longlines-mode 1)
+                                          (flyspell-mode-on))))
   "List of auxiliary buffers, which can be easily accessed
 through `myi-auxiliary-buffers-switch'. New buffers can also be
-added by using `myi-auxiliary-buffer-add/remove-the-current'.")
+added by using `myi-auxiliary-buffer-add/remove-the-current',
+only added buffers can be removed though.
+
+Each element of the list is of the format: (BUF-NAME . FORM),
+the FORM is to be evaluated when this buffer is created.")
 
 (defvar myi-auxiliary-buffer-history nil
   "Auxiliary buffer selection history.")
 
-(defun myi-auxiliary-buffers-switch (&optional add-remove)
-  "Fast switch to one buffer in `myi-auxiliary-buffer-list'.
+(defun myi-auxiliary-buffers-switch (&optional toggle-add-remove)
+  "Fast switch to one buffer in `myi-auxiliary-buffer-alist'.
 If the current buffer is one of the buffers, try to switch to
 another one with `ido' prompt.
 
-ADD-REMOVE - negative, remove the current buffer from auxiliary
-list. Otherwise, add the current buffer into auxiliary list."
-  (interactive "p")                     ;add-remove shall be 1, if omitted
-  (if (not (eq add-remove 1))
-      (myi-auxiliary-buffer-add/remove-the-current add-remove)
-    (let* ((is-auxiliary-buffer (member (buffer-name (current-buffer))
-                                        myi-auxiliary-buffer-list))
+TOGGLE-ADD-REMOVE - if the current buffer is in auxiliary
+buffers, remove the current buffer from auxiliary list.
+Otherwise, add the current buffer into auxiliary list."
+  (interactive "P")
+  (if toggle-add-remove
+      (myi-auxiliary-buffer-add/remove-the-current)
+    ;; switching
+    (let* ((is-auxiliary-buffer (assoc (buffer-name (current-buffer))
+                                       myi-auxiliary-buffer-alist))
            (last-aux-buf (car myi-auxiliary-buffer-history))
            (last-2nd-aux-buf (cadr myi-auxiliary-buffer-history))
-           (aux-chosen-buffer last-aux-buf))
+           (aux-chosen-buffer last-aux-buf)
+           aux-chosen-buffer-newly-created)
       (when (or is-auxiliary-buffer
                 (null myi-auxiliary-buffer-history))
         ;; TODO `ido-completing-read' will damage CHOICES list in
         ;; `ido-make-choice-list' if DEF is not nil. I think this is a bug, but
         ;; here is a workaround.
-        (setq aux-chosen-buffer (ido-completing-read "Auxiliaries: "
-                                                     (copy-tree myi-auxiliary-buffer-list)
+        (setq aux-chosen-buffer (ido-completing-read "Auxiliary buffers: "
+                                                     (copy-tree (assoc-keys myi-auxiliary-buffer-alist))
                                                      nil t nil 'myi-auxiliary-buffer-history
                                                      last-2nd-aux-buf)))
+      (setq aux-chosen-buffer-newly-created
+            (not (get-buffer aux-chosen-buffer)))
       ;; create the buffer if does not existed
       (switch-to-buffer (get-buffer-create aux-chosen-buffer))
+      ;; run the associated hook
+      (when aux-chosen-buffer-newly-created
+        (eval (cdr (assoc aux-chosen-buffer myi-auxiliary-buffer-alist))))
       ;; don't fill the buffer list with auxiliary buffers.
       (when is-auxiliary-buffer
         (bury-buffer (other-buffer))))))
 
-(defun myi-auxiliary-buffer-add/remove-the-current (arg)
-  "Interactively add current buffer to
-`myi-auxiliary-buffer-history', with negative Prefix, remove the
-current buffer."
-  (let ((current-buf-name (buffer-name (current-buffer))))
-    (if (< arg 0)
-        (progn (setq myi-auxiliary-buffer-list
-                     (delete current-buf-name myi-auxiliary-buffer-list))
-               (setq myi-auxiliary-buffer-history
-                     (delete current-buf-name myi-auxiliary-buffer-history))
-               (message "Remove %s from auxiliaries" current-buf-name))
-      (add-to-list 'myi-auxiliary-buffer-list current-buf-name)
-      (add-to-history 'myi-auxiliary-buffer-history current-buf-name)
-      (message "Add %s to auxiliaries" current-buf-name))))
+(defun myi-auxiliary-buffer-add/remove-the-current ()
+  "Add/remove current buffer to/from
+`myi-auxiliary-buffer-history'. Used in
+`myi-auxiliary-buffers-switch'.
+
+Newly added and removable buffers are in the form '(BUF-NAME)."
+  (let* ((current-buf-name (buffer-name (current-buffer)))
+         (is-aux-buf (assoc current-buf-name myi-auxiliary-buffer-alist)))
+    (if is-aux-buf
+        (cond
+         ((y-or-n-p (format "Remove %s from auxiliary buffers"
+                            current-buf-name))
+          (setq myi-auxiliary-buffer-alist
+                (delete (list current-buf-name) myi-auxiliary-buffer-alist))
+          (setq myi-auxiliary-buffer-history
+                (delete current-buf-name myi-auxiliary-buffer-history))
+          (message "%s removed from auxiliaries" current-buf-name))
+         (t
+          (message "Abort. No buffers removed.")))
+      (cond
+       ((y-or-n-p (format "Add %s to auxiliary buffers" current-buf-name))
+        (add-to-list 'myi-auxiliary-buffer-alist (list current-buf-name))
+        (let ((history-delete-duplicates t)) ;remove duplications
+          (add-to-history 'myi-auxiliary-buffer-history current-buf-name))
+        (message "Add %s to auxiliaries" current-buf-name))
+       (t
+        (message "Abort. No buffers added."))))))
 
 (defun my-quickly-take-notes  (beg end)
   "Quicly save text in the region to *scratch-text*"
