@@ -346,6 +346,7 @@ start cycling.
              (let ((hl-line-mode t)) (hl-line-highlight))))))
     (cond (arg
            (unless (funcall goto-marker-func-with-hl my-cycling-start-marker)
+             (hl-line-unhighlight)
              (message "Abort: No start location of cycling.")))
           ((ring-empty-p my-recentloc-ring)
            (message "Abort: Recentloc has no records."))
@@ -361,14 +362,14 @@ start cycling.
              (with-trivial-minor-mode
               '((f12
                  . (progn
+                     (recenter)
+                     (setq ring-idx (1+ ring-idx))
+                     (setq cur-marker (ring-ref my-recentloc-ring ring-idx))
                      (if (= ring-idx recentloc-ring-len)
                          ;; stay in the same marker twice for wrapping
                          (progn (message "Recentloc cycle wrapping...")
                                 (setq ring-idx -1))
-                       (funcall goto-marker-func-with-hl cur-marker))
-                     (recenter)
-                     (setq ring-idx (1+ ring-idx))
-                     (setq cur-marker (ring-ref my-recentloc-ring ring-idx)))))
+                       (funcall goto-marker-func-with-hl cur-marker)))))
               (format "Recentloc cycling to %s..." cur-marker)
               nil
               (progn
