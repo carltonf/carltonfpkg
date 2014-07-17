@@ -896,22 +896,25 @@ sequence of words."
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Enhanced Org
-(defun my-org-source-auto-format (BEG END)
+(defun org-grab-source-snippet-with-block (BEG END)
   "Surround the marked region with org inline source tag, the
   major mode used is the one where the region is in."
   (interactive "r")
-  (let ((cur-mode-name (format "%s" major-mode))
-        (old-buffer (current-buffer)))
-    (with-temp-buffer
-      (insert "#+BEGIN_SRC " cur-mode-name)
-      ;; remove the ending "-mode"
-      (kill-word -1)
-      (delete-char 1)
-      (insert "\n")
-      ;; TODO insert marked region here
-      (insert-buffer-substring-no-properties old-buffer BEG END)
-      (insert "\n#+END_SRC\n")
-      (kill-new (buffer-string)))))
+  (let ((cur-mode-name
+         (substring (format "%s" major-mode) 0 -5)) ; remove the ending "-mode"
+        (raw-grabbed-snippet (buffer-substring-no-properties BEG END))
+        (snippet-buf "*Org Grabbed Source Snippet*"))
+    (unwind-protect
+        (with-current-buffer (get-buffer-create snippet-buf)
+          (org-mode)
+          (insert "#+BEGIN_SRC " cur-mode-name "\n"
+                  raw-grabbed-snippet "\n"
+                  "#+END_SRC\n")
+          (save-window-excursion
+            (display-buffer snippet-buf nil)
+            (if (y-or-n-p "Is this what you want (Y/N)? ")
+                (kill-new (buffer-string)))))
+      (kill-buffer snippet-buf))))
 
 (defun org-insert-source-block-and-edit (language)
   "A helper function to insert a source block."
@@ -957,7 +960,7 @@ get correct Org link."
                              default-directory)))
     (unwind-protect
         (progn
-          (with-current-buffer  (get-buffer-create info-buffer)
+          (with-current-buffer (get-buffer-create info-buffer)
             (let (completion-collection)
               (call-process "/usr/bin/calibredb" nil t nil
                             "list" "--search" query-str)
@@ -1271,6 +1274,20 @@ only be from 2-36 as in `calc-number-radix'."
 ;;     (number-to-string-radix 10))
 ;;   (expect "1100"
 ;;       (number-to-string-radix 12 2)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Enhancement to pp
+(eval-when-compile
+  (require 'pp))
+;;; an expansion for `pp-macroexpand-expression'
+;;;###autoload
+(defun pp-macroexpand-all-expression (expression)
+  "Macroexpand EXPRESSION at ALL levels and pretty-print its
+value."
+  (interactive
+   (list (read-from-minibuffer "Macroexpand ALL: " nil read-expression-map t
+			       'read-expression-history)))
+  (pp-display-expression (macroexpand-all expression) "*Pp Macroexpand-ALL Output*"))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
