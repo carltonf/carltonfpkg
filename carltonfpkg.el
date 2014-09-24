@@ -400,83 +400,91 @@ the original `shell-resync-dirs'."
                            (concat "cd " new-curdir " ; \\"))))
   (shell-resync-dirs))
 
-(defvar myi-console-mode-user-list nil
-  "User-defined console list to be included in `myi-consoles' in
-  addition to `myi-console-mode-list'. The value should be a list
-  of major mode symbols.")
-
 (defvar myi-console-mode-list '(shell-mode eshell-mode)
-  "Default list of modes whose buffers are included in
-`myi-consoles'. On switching a list of console buffers will be
-constructed so that there is no separate console list, only
-console mode list.")
+  "A list of modes whose buffers are considered as 'consoles' and
+can be switched using `myi-consoles'.")
+
 (defvar myi-console-buffer-history nil
   "`myi-consoles' console selection history.")
 
 (defvar myi-console-autostarts (list (cons myi-debug-shell-name #'shell)
-                                        (cons myi-extra-shell-name #'shell)
-                                        ;; `eshell' ARG works different from `shell's
-                                        (cons "*eshell*" (lambda (ignore) (eshell))))
-  "Association list of autostart consoles. The elements of the
-  list should be a CONS of format (BUFNAME . FUNC), of which FUNC
-  will be passed with BUFNAME only.")
+                                     (cons myi-extra-shell-name #'shell)
+                                     ;; `eshell' ARG works different from `shell's
+                                     (cons "*eshell*" (lambda (ignore) (eshell))))
+  "An alist of autostart consoles. The elements of the list
+  should be a CONS of format (BUFNAME . FUNC), of which FUNC will
+  be passed with BUFNAME only. FUNC can be any lisp functions,
+  but normally it should create a buffer and set up its major
+  mode.")
 
 (defun myi-consoles (&optional prompt-choices)
   "An all-in-one command for all interactive buffers, i.e.
 various REPL buffers, `eshell', `shell' buffers. With no
 argument, switch to last visited console. If the current buffer
-is already one of the consoles, prompt to open another console
-in current window."
+is already one of the consoles, prompt to switch to another
+console in current window.
+
+A list of supported 'console' modes are stored in
+`myi-console-mode-list'. A user can also customize
+`myi-console-autostarts' to have a console buffer with special
+initializations."
   (interactive "P")
-  (let* ((console-mode-full-list (append myi-console-mode-list
-                                         myi-console-mode-user-list))
-         console-buffer-list
-         (last-console-choice (car myi-console-buffer-history))
-         ;; default to the last chosen
-         (console-choice last-console-choice)
-         ;; nil if not, t o/w
-         (is-in-console (member major-mode console-mode-full-list)))
+  (let* (console-buffer-list
+         next-console
+         prompted-next-console
+         (is-in-console (member major-mode myi-console-mode-list)))
+    ;; setup `console-buffer-list', it's a list of all active console buffers
+    ;; AND autostart buffers. Note the use of `add-to-list' to avoid repetition.
+    (setq
+     console-buffer-list
+     (loop for buf in (buffer-list)
+           if (and (member (buffer-local-value 'major-mode buf)
+                           myi-console-mode-list))
+           collect (buffer-name buf)))
+    (mapc (lambda (buf-func-pair)
+            (add-to-list 'console-buffer-list
+                         (car buf-func-pair) t))
+          myi-console-autostarts)
+    ;; `next-console' is default to the first entry in history, due to the
+    ;; existence of autostart buffers, membership testing is needed instead of
+    ;; only buffer existing.
+    (loop do (setq next-console (car myi-console-buffer-history))
+          until (or (member next-console console-buffer-list)
+                    (null myi-console-buffer-history))
+          do (setq myi-console-buffer-history
+                   (delete next-console myi-console-buffer-history)))
+    (unless myi-console-buffer-history
+      (setq next-console nil))
+    (setq prompted-next-console next-console)
+
+    ;; manual console switching needed.
     (when (or prompt-choices
-              (null myi-console-buffer-history)
+              (null next-console)
               is-in-console)
-      (mapc (lambda (buf)
-              (if (and (member (buffer-local-value 'major-mode buf)
-                               console-mode-full-list))
-                  (add-to-list 'console-buffer-list
-                               (buffer-name buf)
-                               ;; appending
-                               t)))
-            (buffer-list))
-      ;; autostarts
-      (mapc (lambda (buf-func-pair)
-              (add-to-list 'console-buffer-list
-                           (car buf-func-pair) t))
-            myi-console-autostarts)
       ;; while in a console already, change default to the one before the last.
       (when is-in-console
-        (setq last-console-choice (cadr myi-console-buffer-history)))
-      (setq console-choice
+        (setq prompted-next-console (cadr myi-console-buffer-history)))
+      (setq next-console
             (ido-completing-read "Console: "
                                  console-buffer-list
                                  nil t nil 'myi-console-buffer-history
-                                 ;; make the last selected one the default
-                                 last-console-choice)))
-    (let ((console-buffer (get-buffer console-choice)))
+                                 prompted-next-console)))
+    ;; switch consoles
+    (let ((console-buffer (get-buffer next-console)))
       (unless (eq (current-buffer) console-buffer)
         ;; only popup other window when NOT in a console
         (funcall (if is-in-console
                      #'switch-to-buffer
-                   #'switch-to-buffer-other-window) console-choice)
+                   #'switch-to-buffer-other-window) next-console)
         ;; also bury last visited console buffer, since a switch within a
         ;; console usually means a mistake in the first, so don't mangle the
         ;; buffer list.
-        (if is-in-console
-            (bury-buffer (other-buffer)))
-        ;; handle autostart buffers `switch-to-buffer-other-window' will create
-        ;; non-existent buffer.
-        (if (not console-buffer)
-            (funcall (cdr (assoc console-choice myi-console-autostarts))
-                     console-choice))))))
+        (if is-in-console (bury-buffer (other-buffer)))
+        ;; handle autostart buffers
+        (let ((buf-autostart-func
+               (cdr (assoc next-console myi-console-autostarts))))
+          (if (not console-buffer)
+              (funcall buf-autostart-func next-console)))))))
 
 ;;; custom shells
 ;;; A template, which can be used for almost every kind of shells.
@@ -717,28 +725,60 @@ Newly added and removable buffers are in the form '(BUF-NAME)."
        (t
         (message "Abort. No buffers added."))))))
 
-(defun my-quickly-take-notes  (beg end)
-  "Quicly save text in the region to *scratch-text*"
-  (interactive "r")
-  (let ((str (filter-buffer-substring beg end)))
-    (with-current-buffer (get-buffer-create "*scratch-text*")
-      (goto-char (point-max))
-      ;; insert header
-      (insert "\n;;;; ---------------- "
-              (format-time-string (cadar common-current-time-formats)
-                                  (current-time))
-              " ----------------\n")
-      (insert str)
-      (message "Quick Note saved."))))
+;; (defun my-quickly-take-notes  (beg end)
+;;   "Quicly save text in the region to *scratch-text*"
+;;   (interactive "r")
+;;   (let ((str (filter-buffer-substring beg end)))
+;;     (with-current-buffer (get-buffer-create "*scratch-text*")
+;;       (goto-char (point-max))
+;;       ;; insert header
+;;       (insert "\n\n;;;; ---------------- "
+;;               (format-time-string (cdar common-current-time-formats)
+;;                                   (current-time))
+;;               " ----------------\n")
+;;       (insert str)
+;;       (message "Quick Note saved."))))
 
 ;;; In light of `help-go-back' and `help-go-forward', I found it's super
 ;;; convenient to pop up help window. Also `with-help-window' macro is good for
 ;;; us as well.
-(defun myh-switch-to-help-window ()
-  "Pop up the help window"
-  (interactive)
+(defun myh-switch-to-help-window (&rest extras)
+  "Pop up the help window, EXTRAS are to be ignored."
   (switch-to-buffer-other-window (get-buffer (help-buffer))
                                  nil))
+
+(defun myi-help-jump ()
+  (interactive)
+  (let ((help-topics-list
+         (with-current-buffer (help-buffer)
+           (append (list (list 0 #'myh-switch-to-help-window
+                               (cadr help-xref-stack-item))) ;fake position 0
+                   help-xref-stack
+                   help-xref-forward-stack)))
+        help-topics-alist
+        topic-choice)
+    (setq help-topics-alist
+          (loop for item in help-topics-list
+                collect (cons
+                         (let ((position (car item))
+                               (help-type (cadr item))
+                               (topic (caddr item))
+                               (extras (cdddr item)))
+                           (format "%-30s %-15s %-5s %s" 
+                                   (propertize (pp-to-string topic) 'face 'bold)
+                                   (pp-to-string help-type)
+                                   (pp-to-string position)
+                                   (s-trim (pp-to-string extras))))
+                         item)))
+    (setq topic-choice
+          (helm-comp-read "Pick a help topic: "
+                          (assoc-keys help-topics-alist)
+                          :must-match t))
+    (let* ((item (assoc-default topic-choice help-topics-alist
+                                nil nil))
+           (method (cadr item))
+           (args (cddr item)))
+      (apply method args))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Enhanced Time/Date
@@ -896,24 +936,28 @@ sequence of words."
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Enhanced Org
-(defun org-grab-source-snippet-with-block (BEG END)
+(defun myi-org-capture-source-snippet-with-block (BEG END)
   "Surround the marked region with org inline source tag, the
   major mode used is the one where the region is in."
   (interactive "r")
   (let ((cur-mode-name
          (substring (format "%s" major-mode) 0 -5)) ; remove the ending "-mode"
         (raw-grabbed-snippet (buffer-substring-no-properties BEG END))
-        (snippet-buf "*Org Grabbed Source Snippet*"))
+        (snippet-buf "*Org Grabbed Source Snippet*")
+        captured-snippet)
     (unwind-protect
-        (with-current-buffer (get-buffer-create snippet-buf)
-          (org-mode)
-          (insert "#+BEGIN_SRC " cur-mode-name "\n"
-                  raw-grabbed-snippet "\n"
-                  "#+END_SRC\n")
+        (progn
+          (with-current-buffer (get-buffer-create snippet-buf)
+            (org-mode)
+            (insert "#+BEGIN_SRC " cur-mode-name "\n"
+                    raw-grabbed-snippet "\n"
+                    "#+END_SRC\n")
+            (setq captured-snippet (buffer-string)))
+          ;; `save-window-excursion' mixes current buffers.
           (save-window-excursion
             (display-buffer snippet-buf nil)
-            (if (y-or-n-p "Is this what you want (Y/N)? ")
-                (kill-new (buffer-string)))))
+            (if (y-or-n-p "Org Capture Snippet: Is this what you want (Y/N)? ")
+                (kill-new captured-snippet))))
       (kill-buffer snippet-buf))))
 
 (defun org-insert-source-block-and-edit (language)
@@ -1201,6 +1245,28 @@ OBJECT, like princ."
 ;;    (s-mapconcat* #'identity '(2014 6 6) "-"))
 ;;  (expect "19:9:14:3434"
 ;;    (s-mapconcat* #'identity '(19 9 14 3434) ":")))
+
+(defun make-string* (length init)
+  "An enhanced version of `make-string', INIT can be anything
+  that can be converted to string. The result is LENGTH copies of
+  converted INIT concatenated together."
+  ;; (let ((i 0)
+  ;;       (init-str (princ-to-string init))
+  ;;       (result))
+  ;;   (while (< i length)
+  ;;     (setq result (concat init-str result))
+  ;;     (setq i (1+ i)))
+  ;;   result)
+  (mapconcat #'identity
+             (loop repeat length
+                   collect (princ-to-string init))
+             nil))
+
+;; (with-ert-expectations
+;;  (expect "%5s%5s%5s%5s%5s"
+;;    (make-string* 5 "%5s"))
+;;  (expect ""
+;;    (make-string* 0 "lll")))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Enhance paredit
