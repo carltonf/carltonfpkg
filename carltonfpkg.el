@@ -537,8 +537,16 @@ initializations."
 ;;       (rename-buffer term-buffer-name))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; enhanced doc lookup
-;;;
+;;;: Emacs Lisp organization
+;;: IMenu support for self-organized source format
+(defun myi-emacs-lisp-setup-organization-imenu ()
+  "Add extra organization items to imenus."
+  (add-to-list 'imenu-generic-expression
+               '("Section" "^;;;: \\([- +_[:alnum:]]+\\)" 1)))
+(add-hook 'emacs-lisp-mode-hook #'myi-emacs-lisp-setup-organization-imenu)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;: Man Page
 (require 'man)
 
 (defun myi-list-opened-man-buffers ()
@@ -779,6 +787,24 @@ Newly added and removable buffers are in the form '(BUF-NAME)."
            (method (cadr item))
            (args (cddr item)))
       (apply method args))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;: Extra Clipboard
+(defvar myi-extra-clipboard ""
+  "A variable that holds extra copied content. It contains a
+`kill-ring' element.")
+(defun myi-extra-clipboard-kill/yank (&optional arg)
+  "A simple extra clipboard that can holds a copied content
+independently from `kill-ring'.
+
+If ARG is non-nill, put the latest kill in `myi-extra-clipboard'
+_and_ insert the content of `myi-extra-clipboard' at point like
+when ARG is nil."
+  (interactive "P")
+  (when arg
+    (setq myi-extra-clipboard
+          (current-kill 0)))
+  (insert-for-yank myi-extra-clipboard))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Enhanced Time/Date
