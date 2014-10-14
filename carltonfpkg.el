@@ -135,6 +135,13 @@ UNWIND-SEXP, a sexp always gets run as in UNWINDFORMS in
        ,exit-sexp)))
 
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;: ICRepos Manager
+(defun myi-icrepos-manager (log-path)
+  (with-current-buffer (find-file-noselect log-path)
+    (setq default-directory "~/local")))
+;; TODO a major mode for this?
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Enhanced Buffer Management
 ;;;
