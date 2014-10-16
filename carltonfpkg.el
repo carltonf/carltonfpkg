@@ -137,6 +137,7 @@ UNWIND-SEXP, a sexp always gets run as in UNWINDFORMS in
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;: ICRepos Manager
+;;;###autoload
 (defun myi-icrepos-manager (log-path)
   (with-current-buffer (find-file-noselect log-path)
     (setq default-directory "~/local")))
