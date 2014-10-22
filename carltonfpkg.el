@@ -62,15 +62,15 @@ NOTE: The first format is hard-coded as default.")
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;: Easy Highlighting
-(require-ok-then-setup 'hi-lock
-    (defvar toggle-highlight-colors-rotator
-      (ring-convert-sequence-to-ring '(hi-yellow hi-blue hi-green hi-pink)))
+(require 'hi-lock)
+(defvar toggle-highlight-colors-rotator
+  (ring-convert-sequence-to-ring '(hi-yellow hi-blue hi-green hi-pink)))
 
-    (defvar toggle-highlight-last-color 'hi-yellow
-      "To rotate the ring.")
+(defvar toggle-highlight-last-color 'hi-yellow
+  "To rotate the ring.")
 
-    (defun toggle-highlight-thing-at-point (&optional arg)
-      "Toggle highlight of the thing at point. A convenience
+(defun toggle-highlight-thing-at-point (&optional arg)
+  "Toggle highlight of the thing at point. A convenience
 function to easily take advantage of highlighting facility.
 
 With one prefix argument (C-u), highlighting regexp is shown for
@@ -78,20 +78,20 @@ editing in minibuffer, two prefix arguments (C-u C-u) will
 present both regexp and color for users to choose. Otherwise the
 regexp is created using the symbol at point and the color is
 picked automatically from `toggle-highlight-colors-rotator'."
-      (interactive "p")
-      (let* ((phrase (thing-at-point 'symbol))
-             (pat (format "\\b%s\\b" phrase))
-             (pos (point)))
-        (setq toggle-highlight-last-color (ring-next toggle-highlight-colors-rotator
-                                                     toggle-highlight-last-color))
-        (if (member pat (assoc-keys hi-lock-interactive-patterns))
-            (unhighlight-regexp pat)
-          (highlight-regexp (if (>= arg 4)
-                                (read-string "Highlight Pattern: " pat)
-                              pat)
-                            (if (>= arg 16)
-                                (hi-lock-read-face-name)
-                              toggle-highlight-last-color))))))
+  (interactive "p")
+  (let* ((phrase (thing-at-point 'symbol))
+         (pat (format "\\b%s\\b" phrase))
+         (pos (point)))
+    (setq toggle-highlight-last-color (ring-next toggle-highlight-colors-rotator
+                                                 toggle-highlight-last-color))
+    (if (member pat (assoc-keys hi-lock-interactive-patterns))
+        (unhighlight-regexp pat)
+      (highlight-regexp (if (>= arg 4)
+                            (read-string "Highlight Pattern: " pat)
+                          pat)
+                        (if (>= arg 16)
+                            (hi-lock-read-face-name)
+                          toggle-highlight-last-color)))))
 
 ;;;;;;;;;;;;;;;;
 ;;; Generic functionality
