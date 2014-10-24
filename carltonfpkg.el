@@ -1344,9 +1344,11 @@ Also note, this function uses changed `er/mark-comment-block'"
   (interactive)
   (save-excursion
     (setq transient-mark-mode t)
-    (if (or (er--point-is-in-comment-p)
+    (if (or (eq 'comment (syntax-ppss-context (syntax-ppss (point))))
             (looking-at "\\s *\\s<"))
-        (er/mark-comment-block)
+        ;; use `mark-comment' from ER package, o/w we need to duplicate this
+        ;; functionality.
+        (er/mark-comment)
       (mark-sexp))
     (paredit-comment-dwim)
     (setq transient-mark-mode nil)))
