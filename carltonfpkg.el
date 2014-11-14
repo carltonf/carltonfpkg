@@ -304,7 +304,7 @@ any functions rather than only interactive ones."
 (ad-activate 'describe-register-1)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; Enhanced Dired
+;;;: Enhanced Dired
 (defun dired-up-directory-in-place ()
   "Move up directory tree in current dired buffer"
   (interactive)
@@ -320,6 +320,25 @@ directory), with prefix ARG, kill current buffer"
         (dired-jump)
         (kill-buffer this-buffer))
     (dired-jump)))
+
+;;: Enhance "renaming/moving" experience
+(defun myi-dired-rename-file-here (fpath)
+  "Rename/move a file to the current =default-directory=.
+
+TODO integrate with dired. What about a temporary dired buffer?"
+  (interactive (list (ido-read-file-name "Files to be moved HERE: "
+                                         "~/Downloads")))
+  (rename-file fpath default-directory)
+  (message "Files moved here."))
+
+(defun diredp-rename-this/other-file (&optional arg)
+  "Without RAG, it's `diredp-rename-this-file'. Otherwise it pops
+up a window for selecting files to be moved here."
+  (interactive "P")
+  (if arg
+      (call-interactively #'myi-dired-rename-file-here)
+    (call-interactively #'diredp-rename-this-file)))
+(define-key dired-mode-map (kbd "r") #'diredp-rename-this/other-file)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Enhanced Movement
