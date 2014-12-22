@@ -1519,8 +1519,12 @@ property list."
   "The list of commands of SQLite3 as output by '.help' .")
 
 (defun company-sqlite--prefix ()
-  (when (looking-back "\\.?[a-zA-Z]+" (point-at-bol) t)
-    (or (match-string-no-properties 0) "")))
+  (save-excursion
+    (let* ((end (point))
+           (start (if (search-backward-regexp "[^_a-zA-Z.]" (point-at-bol) t)
+                      (1+ (point))
+                    (point-at-bol))))
+      (buffer-substring-no-properties start end))))
 
 (defun company-sqlite (command &optional arg &rest ignored)
   "`company-mode' completion back-end for SQLite."
@@ -1531,11 +1535,15 @@ property list."
                       (eq major-mode 'sql-mode))
               (company-sqlite--prefix)))
     (candidates
-     (remove-if-not
-      (lambda (c) (string-prefix-p arg c t))
-      (if (string-prefix-p "." arg)
-          sqlite-commands
-        sqlite-keywords)))
+     (let* ((sqlite-table-list
+             (sql-sqlite-completion-object (current-buffer) nil))
+            (choices (remove-if-not
+                      (lambda (c) (string-prefix-p arg c t))
+                      (append (if (string-prefix-p "." arg)
+                                  sqlite-commands
+                                sqlite-keywords)
+                              sqlite-table-list nil))))
+       (or choices (company-other-backend))))
     (sorted t)
     ;; ignore case to select candidates but changed to candidate case
     (ignore-case 't)))
