@@ -1505,5 +1505,47 @@ property list."
 ;;   (expect nil
 ;;     (plist-values nil)))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;: SQLite completion with company
+;; quite basic
+(defconst sqlite-keywords
+  '("ABORT" "ACTION" "ADD" "AFTER" "ALL" "ALTER" "ANALYZE" "AND" "AS" "ASC" "ATTACH" "AUTOINCREMENT" "BEFORE" "BEGIN" "BETWEEN" "BY" "CASCADE" "CASE" "CAST" "CHECK" "COLLATE" "COLUMN" "COMMIT" "CONFLICT" "CONSTRAINT" "CREATE" "CROSS" "CURRENT_DATE" "CURRENT_TIME" "CURRENT_TIMESTAMP" "DATABASE" "DEFAULT" "DEFERRABLE" "DEFERRED" "DELETE" "DESC" "DETACH" "DISTINCT" "DROP" "EACH" "ELSE" "END" "ESCAPE" "EXCEPT" "EXCLUSIVE" "EXISTS" "EXPLAIN" "FAIL" "FOR" "FOREIGN" "FROM" "FULL" "GLOB" "GROUP" "HAVING" "IF" "IGNORE" "IMMEDIATE" "IN" "INDEX" "INDEXED" "INITIALLY" "INNER" "INSERT" "INSTEAD" "INTERSECT" "INTO" "IS" "ISNULL" "JOIN" "KEY" "LEFT" "LIKE" "LIMIT" "MATCH" "NATURAL" "NO" "NOT" "NOTNULL" "NULL" "OF" "OFFSET" "ON" "OR" "ORDER" "OUTER" "PLAN" "PRAGMA" "PRIMARY" "QUERY" "RAISE" "RECURSIVE" "REFERENCES" "REGEXP" "REINDEX" "RELEASE" "RENAME" "REPLACE" "RESTRICT" "RIGHT" "ROLLBACK" "ROW" "SAVEPOINT" "SELECT" "SET" "TABLE" "TEMP" "TEMPORARY" "THEN" "TO" "TRANSACTION" "TRIGGER" "UNION" "UNIQUE" "UPDATE" "USING" "VACUUM" "VALUES" "VIEW" "VIRTUAL" "WHEN" "WHERE" "WITH" "WITHOUT")
+  "The list below shows all possible keywords used by any build
+  of SQLite regardless of compile-time options. see
+  https://www.sqlite.org/lang_keywords.html")
+
+(defconst sqlite-commands
+  '(".backup" ".bail" ".clone" ".databases" ".dump" ".echo" ".eqp" ".exit" ".explain" ".fullschema" ".headers" ".help" ".import" ".indices" ".load" ".log" ".mode" ".nullvalue" ".once" ".open" ".output" ".print" ".prompt" ".quit" ".read" ".restore" ".save" ".schema" ".separator" ".shell" ".show" ".stats" ".system" ".tables" ".timeout" ".timer" ".trace" ".vfsname" ".width")
+  "The list of commands of SQLite3 as output by '.help' .")
+
+(defun company-sqlite--prefix ()
+  (when (looking-back "\\.?[a-zA-Z]+" (point-at-bol) t)
+    (or (match-string-no-properties 0) "")))
+
+(defun company-sqlite (command &optional arg &rest ignored)
+  "`company-mode' completion back-end for SQLite."
+  (interactive (list 'interactive))
+  (cl-case command
+    (interactive (company-begin-backend 'company-sqlite))
+    (prefix (when (or (eq major-mode 'sql-interactive-mode)
+                      (eq major-mode 'sql-mode))
+              (company-sqlite--prefix)))
+    (candidates
+     (remove-if-not
+      (lambda (c) (string-prefix-p arg c t))
+      (if (string-prefix-p "." arg)
+          sqlite-commands
+        sqlite-keywords)))
+    (sorted t)
+    ;; ignore case to select candidates but changed to candidate case
+    (ignore-case 't)))
+
+(add-to-list 'company-safe-backends '(company-sqlite . "SQLite"))
+
+(defun company-sqlite-enabler ()
+  (add-to-list 'company-backends #'company-sqlite))
+(add-hook 'sql-interactive-mode-hook #'company-sqlite-enabler)
+
+
 (provide 'carltonfpkg)
 ;;; carltonfpkg.el ends here
