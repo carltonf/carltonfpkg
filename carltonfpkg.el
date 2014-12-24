@@ -1536,7 +1536,7 @@ property list."
               (company-sqlite--prefix)))
     (candidates
      (let* ((sqlite-table-list
-             (sql-sqlite-completion-object (current-buffer) nil))
+             (sql-sqlite-completion-object sql-buffer nil))
             (choices (remove-if-not
                       (lambda (c) (string-prefix-p arg c t))
                       (append (if (string-prefix-p "." arg)
