@@ -713,7 +713,7 @@ consider text properties."
                                      ("*scratch-text*"
                                       . (progn
                                           (text-mode)
-                                          (longlines-mode 1)
+                                          (visual-line-mode 1)
                                           (flyspell-mode-on))))
   "List of auxiliary buffers, which can be easily accessed
 through `myi-auxiliary-buffers-switch'. New buffers can also be
