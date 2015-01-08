@@ -146,8 +146,7 @@ UNWIND-SEXP, a sexp always gets run as in UNWINDFORMS in
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Enhanced Buffer Management
 ;;;
-;;; switch to previous buffer
-(defun switch-to-previous-buffer ()
+(defun switch-to-last-buffer ()
   "Switch to previously visited buffer."
   (interactive)
   (switch-to-buffer (other-buffer)))
