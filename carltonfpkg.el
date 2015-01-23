@@ -1435,7 +1435,14 @@ only be from 2-36 as in `calc-number-radix'."
 ;;;###autoload
 (defun pp-macroexpand-all-expression (expression)
   "Macroexpand EXPRESSION at ALL levels and pretty-print its
-value."
+value.
+
+NOTE: for symbols from `make-symbol', though they are interned
+symbols different from symbols in `obarray'. The form output by
+`macroexpand-all' won't show this difference and thus the output
+might no be equivalent to the original.
+
+TODO Can we adapt `macroexpand-all' to show this change."
   (interactive
    (list (read-from-minibuffer "Macroexpand ALL: " nil read-expression-map t
 			       'read-expression-history)))
