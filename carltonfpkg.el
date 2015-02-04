@@ -1554,8 +1554,6 @@ property list."
     ;; ignore case to select candidates but changed to candidate case
     (ignore-case 't)))
 
-(add-to-list 'company-safe-backends '(company-sqlite . "SQLite"))
-
 (defun company-sqlite-enabler ()
   (add-to-list 'company-backends #'company-sqlite))
 (add-hook 'sql-interactive-mode-hook #'company-sqlite-enabler)
