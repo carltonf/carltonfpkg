@@ -864,6 +864,12 @@ when ARG is nil."
           (current-kill 0)))
   (insert-for-yank myi-extra-clipboard))
 
+(defun insert-last-n-killed (num)
+  "Insert the last NUM killed text at current point. Each text
+snippet is separated by exactly one line break."
+  (interactive "p")
+  (loop for i from 0 to num
+        do (insert (nth i kill-ring) "\n")))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Enhanced Time/Date
 ;;; A pure elisp alternative to  "C-u M-! date"
