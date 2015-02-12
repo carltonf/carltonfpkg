@@ -438,11 +438,6 @@ start cycling.
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; enhanced shell/consoles/repls
 ;;;
-(defvar myi-debug-shell-name "*debug-shell*"
-  "Workhorse in-Emacs shell.")
-(defvar myi-extra-shell-name "*extra-shell*"
-  "A secondary in-Emacs shell")
-
 (defun myi-extended-shell-resync-dirs ()
   "If there is other windows in current frame, then change
 shell's current directory to the `default-directory' of the
@@ -458,22 +453,79 @@ the original `shell-resync-dirs'."
                            (concat "cd " new-curdir " ; \\"))))
   (shell-resync-dirs))
 
-(defvar myi-console-mode-list '(comint-mode eshell-mode)
-  "A list of modes whose buffers are considered as 'consoles' and
-can be switched using `myi-consoles'.")
+(require 'eieio)
+(defmethod buffer-mru-alist-valid? :static ((class myi-consoles-class) alist)
+  "Validate the value of `buffer-mru-alist' slot.
 
-(defvar myi-console-buffer-history nil
-  "`myi-consoles' console selection history.")
-
-(defvar myi-console-autostarts (list (cons myi-debug-shell-name #'shell)
-                                     (cons myi-extra-shell-name #'shell)
-                                     ;; `eshell' ARG works different from `shell's
-                                     (cons "*eshell*" (lambda (ignore) (eshell))))
-  "An alist of autostart consoles. The elements of the list
+Each element of `buffer-mru-alist' should be a con cell in the
+form (buffer-name . timestamp). And the whole list should be
+sorted with timestamp ascendingly."
+  (let ((last-concell (car alist)))
+    (-all? (lambda (concell)
+             ;; TODO we should have `time-more-p'
+             (unless (time-less-p (cdr concell)
+                                  (cdr last-concell))
+               (setq last-concell concell)
+               t))
+           (cdr alist))))
+(defclass myi-consoles-class ()
+  ((mode-list :initarg :mode-list
+              :initform '(comint-mode eshell-mode)
+              :type (satisfies listp)
+              :documentation
+              "A list of modes whose buffers are considered as
+  'consoles' and can be switched using `myi-consoles'.")
+   (autostarts :initarg :autostarts
+               :initform (list
+                          ;; Workhorse in-Emacs shell.
+                          (cons "*debug-shell*" #'shell)
+                          ;; A secondary in-Emacs shell
+                          (cons "*extra-shell*" #'shell)
+                          ;; `eshell' ARG works different from `shell's
+                          (cons "*eshell*" (lambda (ignore) (eshell))))
+               ;; TODO more rigid type?
+               :type (satisfies listp)
+               :documentation
+               "An alist of autostart consoles. The elements of the list
   should be a CONS of format (BUFNAME . FUNC), of which FUNC will
   be passed with BUFNAME only. FUNC can be any lisp functions,
   but normally it should create a buffer and set up its major
   mode.")
+   ;; No initarg, this variable is exposed to outside as `buffer-mru-list'.
+   ;; User will think of this only as buffer list
+   (buffer-mru-alist :initform nil
+                     :type (satisfies (lambda (alist)
+                                        (buffer-mru-alist-valid?
+                                         myi-consoles-class
+                                         alist)))
+                     :protection :private
+                     :reader buffer-mru-list
+                     :writer buffer-mru-list-add
+                     :documentation
+                     "`myi-consoles' console buffer alist in MRU
+  order. To preserve the order, use designated writer.")))
+
+(defmethod buffer-mru-list-add ((this myi-consoles-class) newbuf)
+  "Add newbuf to `buffer-mru-list'"
+  (with-slots (buffer-mru-alist) this
+    (setq buffer-mru-alist
+          (-sort (lambda (c1 c2)
+                   (time-less-p (cdr c1) (cdr c2)))
+                 (apply #'list
+                        (cons newbuf (current-time))
+                        buffer-mru-alist)))))
+(defmethod buffer-mru-list ((this myi-consoles-class))
+  "Return `buffer-mru-list'."
+  (assoc-keys (oref this buffer-mru-alist)))
+
+(defmacro eieio-clear-method-definitions (symbal &optional class)
+  "Convenient macros. Clear all method definitions for SYMBAL.
+Optionally only the definitions of CLASS.
+
+NOTE if all method definitions of SYMBAL is cleared,
+`fmakunbound' the SYMBAL as well, so later we can define it with
+new methods. "
+  (error "Not implemented."))
 
 (defun derived-mode-p-2 (mm &rest modes)
   "Test whether mm is derived from one of the MODES "
