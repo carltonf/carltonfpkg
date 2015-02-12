@@ -453,9 +453,29 @@ the original `shell-resync-dirs'."
                            (concat "cd " new-curdir " ; \\"))))
   (shell-resync-dirs))
 
+;;; myi-consoles BEG
 (require 'eieio)
-(defmethod buffer-mru-alist-valid? :static ((class myi-consoles-class) alist)
-  "Validate the value of `buffer-mru-alist' slot.
+(defvar myi-consoles-mode-list '(comint-mode eshell-mode)
+  "A list of modes whose buffers are considered as
+'consoles' and can be switched using `myi-consoles'.")
+
+(defvar myi-consoles-autostarts
+  (list
+   ;; Workhorse in-Emacs shell.
+   (cons "*debug-shell*" #'shell)
+   ;; A secondary in-Emacs shell
+   (cons "*extra-shell*" #'shell)
+   ;; `eshell' ARG works different from `shell's
+   (cons "*eshell*" (lambda (ignore) (eshell))))
+  "An alist of autostart consoles. The elements of
+  the list should be a CONS of format (BUFNAME . FUNC), of which
+  FUNC will be passed with BUFNAME only. FUNC can be any lisp
+  functions, but normally it should create a buffer and set up
+  its major mode. The buffer is setup only when it gets chosen,
+  see `buffer-mru-list-update'.")
+
+(defun myi-consoles-class-buffer-mru-alist-valid? (alist)
+  "Validate the value of `buffer-mru-alist' slot in `myi-consoles-class'.
 
 Each element of `buffer-mru-alist' should be a con cell in the
 form (buffer-name . timestamp). And the whole list should be
@@ -463,41 +483,16 @@ sorted with timestamp ascendingly."
   (let ((last-concell (car alist)))
     (-all? (lambda (concell)
              ;; TODO we should have `time-more-p'
-             (unless (time-less-p (cdr concell)
-                                  (cdr last-concell))
+             (unless (time-less-p (cdr last-concell)
+                                  (cdr concell))
                (setq last-concell concell)
                t))
            (cdr alist))))
 (defclass myi-consoles-class ()
-  ((mode-list :initarg :mode-list
-              :initform '(comint-mode eshell-mode)
-              :type (satisfies listp)
-              :documentation
-              "A list of modes whose buffers are considered as
-  'consoles' and can be switched using `myi-consoles'.")
-   (autostarts :initarg :autostarts
-               :initform (list
-                          ;; Workhorse in-Emacs shell.
-                          (cons "*debug-shell*" #'shell)
-                          ;; A secondary in-Emacs shell
-                          (cons "*extra-shell*" #'shell)
-                          ;; `eshell' ARG works different from `shell's
-                          (cons "*eshell*" (lambda (ignore) (eshell))))
-               ;; TODO more rigid type?
-               :type (satisfies listp)
-               :documentation
-               "An alist of autostart consoles. The elements of the list
-  should be a CONS of format (BUFNAME . FUNC), of which FUNC will
-  be passed with BUFNAME only. FUNC can be any lisp functions,
-  but normally it should create a buffer and set up its major
-  mode.")
    ;; No initarg, this variable is exposed to outside as `buffer-mru-list'.
    ;; User will think of this only as buffer list
-   (buffer-mru-alist :initform nil
-                     :type (satisfies (lambda (alist)
-                                        (buffer-mru-alist-valid?
-                                         myi-consoles-class
-                                         alist)))
+  ((buffer-mru-alist :initform nil
+                     :type (satisfies myi-consoles-class-buffer-mru-alist-valid?)
                      :protection :private
                      :reader buffer-mru-list
                      :writer buffer-mru-list-add
@@ -505,18 +500,78 @@ sorted with timestamp ascendingly."
                      "`myi-consoles' console buffer alist in MRU
   order. To preserve the order, use designated writer.")))
 
-(defmethod buffer-mru-list-add ((this myi-consoles-class) newbuf)
-  "Add newbuf to `buffer-mru-list'"
-  (with-slots (buffer-mru-alist) this
-    (setq buffer-mru-alist
-          (-sort (lambda (c1 c2)
-                   (time-less-p (cdr c1) (cdr c2)))
-                 (apply #'list
-                        (cons newbuf (current-time))
-                        buffer-mru-alist)))))
+(defmethod derived-member-of-mode-list? ((this myi-consoles-class) mm)
+  "Test whether major MM is a derived mode from one of the
+`myi-consoles-mode-list'"
+  (let ((major-mode mm))
+    (apply #'derived-mode-p myi-consoles-mode-list)))
+
+(defmethod buffer-mru-list-update ((this myi-consoles-class) &optional chosen-console)
+  "Update `buffer-mru-list'.
+
+By default, it checks if there are new buffers conforming
+`myi-consoles-mode-list' or new additions of
+`myi-consoles-autostarts'. And thus this method should be called
+before using `buffer-mru-list' to make sure the list is
+up-to-date.
+
+Or, if CHOSEN-CONSOLE is non-nil, this method will only update
+CHOSEN-CONSOLE in `buffer-mru-list'. And thus should be called
+when a new console is chosen. While updating list, if the
+CHOSEN-CONSOLE is one of autostart, this method also makes sure
+it gets started.
+
+TODO some hooks to do auto-updates?"
+  (let ((autostarts myi-consoles-autostarts))
+    (with-slots (buffer-mru-alist) this
+      (if chosen-console
+          ;; resorting only when CHOSEN-CONSOLE is not at head
+          (progn
+            (unless (string-equal (caar buffer-mru-alist) chosen-console)
+              (setq buffer-mru-alist
+                    (remove-if #'(lambda (bt-pair)
+                                   (string-equal (car bt-pair)
+                                                 chosen-console))
+                               buffer-mru-alist))
+              (buffer-mru-list-add this chosen-console))
+            ;; make sure the buffer exists
+            (when (and (assoc chosen-console autostarts)
+                       (not (buffer-live-p (get-buffer chosen-console))))
+              (save-window-excursion
+                (funcall (cdr (assoc chosen-console autostarts))
+                         chosen-console))))
+        ;; global update
+        (setq buffer-mru-alist
+              (remove-if-not (lambda (bt-pair)
+                               (buffer-live-p (car bt-pair)))
+                             buffer-mru-alist))
+        (loop for buf in (buffer-list)
+              when (derived-member-of-mode-list? this
+                                                 (buffer-local-value 'major-mode buf))
+              do (buffer-mru-list-add this
+                                      (buffer-name buf)))
+        (loop for bufn in (assoc-keys autostarts)
+              do (buffer-mru-list-add this bufn))))))
+
+(defmethod buffer-mru-list-add ((this myi-consoles-class) bufname)
+  "Add bufname to `buffer-mru-list' if bufname is not in the list yet"
+  (unless (member bufname (buffer-mru-list this))
+    (with-slots (buffer-mru-alist) this
+      (setq buffer-mru-alist
+            (-sort (lambda (c1 c2)
+                     ;; MRU order
+                     (not (time-less-p (cdr c1) (cdr c2))))
+                   (apply #'list
+                          (cons bufname (current-time))
+                          buffer-mru-alist))))))
+
 (defmethod buffer-mru-list ((this myi-consoles-class))
   "Return `buffer-mru-list'."
   (assoc-keys (oref this buffer-mru-alist)))
+
+(defmethod buffer-mru-list-contains? ((this myi-consoles-class) buf)
+  "Test whether BUF in contained in `buffer-mru-list'."
+  (member (buffer-name buf) (buffer-mru-list this)))
 
 (defmacro eieio-clear-method-definitions (symbal &optional class)
   "Convenient macros. Clear all method definitions for SYMBAL.
@@ -527,81 +582,53 @@ NOTE if all method definitions of SYMBAL is cleared,
 new methods. "
   (error "Not implemented."))
 
-(defun derived-mode-p-2 (mm &rest modes)
-  "Test whether mm is derived from one of the MODES "
-  (let ((major-mode mm))
-    (apply #'derived-mode-p modes)))
+(defvar myi-consoles-data (myi-consoles-class "myi-consoles")
+  "Object of `myi-consoles-class' mainly holds data for
+`myi-consoles', some are state data while some are customization
+and etc.")
 
-(defun myi-consoles (&optional prompt-choices)
+(defun myi-consoles (&optional prompt-choices-p)
   "An all-in-one command for all interactive buffers, i.e.
 various REPL buffers, `eshell', `comint'-derived buffers. With no
 argument, switch to last visited console. If the current buffer
 is already one of the consoles, prompt to switch to another
 console in current window.
 
-A list of supported 'console' modes are stored in
-`myi-console-mode-list'. A user can also customize
-`myi-console-autostarts' to have a console buffer with special
-initialization."
+Related data include stateful ones are stored in
+`myi-consoles-data'."
   (interactive "P")
-  (let* (console-buffer-list
-         next-console
-         prompted-next-console
-         is-in-console)
-    ;; setup `console-buffer-list', it's a list of all active console buffers
-    ;; AND autostart buffers.
-    (setq console-buffer-list
-          (loop for buf in (buffer-list)
-                when (apply #'derived-mode-p-2
-                            (buffer-local-value 'major-mode buf)
-                            myi-console-mode-list)
-                collect (buffer-name buf)))
-    (mapc (lambda (buf-func-pair)
-            (add-to-list 'console-buffer-list
-                         (car buf-func-pair) t))
-          myi-console-autostarts)
-    ;; `next-console' is default to the first entry in history, due to the
-    ;; existence of autostart buffers, membership testing is needed instead of
-    ;; only buffer existing.
-    (loop do (setq next-console (car myi-console-buffer-history))
-          until (or (member next-console console-buffer-list)
-                    (null myi-console-buffer-history))
-          do (setq myi-console-buffer-history
-                   (delete next-console myi-console-buffer-history)))
-    (unless myi-console-buffer-history
-      (setq next-console nil))
-    (setq prompted-next-console next-console)
+  (let ((data myi-consoles-data))
+    (buffer-mru-list-update data)
+    (unless (buffer-mru-list data)
+      (error "Myi-Consoles: No consoles are available."))
+    (let* ((console-mru-list (remove-if (lambda (bufn)
+                                          (string-equal bufn (buffer-name)))
+                                        (buffer-mru-list data)))
+           ;; Choices of consoles are displayed when
+           ;; 1. User explicitly requires.
+           ;; 2. `myi-consoles' is issued while current buffer is a console.
+           (in-console-p (buffer-mru-list-contains? data
+                                                    (current-buffer)))
+           (prompt-choices-p (or prompt-choices-p
+                                 in-console-p))
+           chosen-console)
+      (if prompt-choices-p
+          (setq chosen-console (ido-completing-read
+                                "Console: "
+                                console-mru-list nil t))
+        (setq chosen-console (car console-mru-list)))
+      (buffer-mru-list-update data chosen-console)
+      ;; switching console
+      ;; reuse current window if already in a console
+      (if in-console-p
+          ;; also bury last visited console buffer, since a switch within a
+          ;; console usually means a mistake in the first, so don't mangle the
+          ;; buffer list.
+          (progn (bury-buffer (current-buffer))
+                 (switch-to-buffer chosen-console))
+        (switch-to-buffer-other-window chosen-console)))))
+;;; myi-consoles END
 
-    ;; manual console switching needed.
-    (setq is-in-console (member (buffer-name (current-buffer))
-                                console-buffer-list))
-    (when (or prompt-choices
-              (null next-console)
-              is-in-console)
-      ;; while in a console already, change default to the one before the last.
-      (when is-in-console
-        (setq prompted-next-console (cadr myi-console-buffer-history)))
-      (setq next-console
-            (ido-completing-read "Console: "
-                                 console-buffer-list
-                                 nil t nil 'myi-console-buffer-history
-                                 prompted-next-console)))
-    ;; switch consoles
-    (let ((console-buffer (get-buffer next-console)))
-      (unless (eq (current-buffer) console-buffer)
-        ;; only popup other window when NOT in a console
-        (funcall (if is-in-console
-                     #'switch-to-buffer
-                   #'switch-to-buffer-other-window) next-console)
-        ;; also bury last visited console buffer, since a switch within a
-        ;; console usually means a mistake in the first, so don't mangle the
-        ;; buffer list.
-        (if is-in-console (bury-buffer (other-buffer)))
-        ;; handle autostart buffers
-        (let ((buf-autostart-func
-               (cdr (assoc next-console myi-console-autostarts))))
-          (if (not console-buffer)
-              (funcall buf-autostart-func next-console)))))))
 
 ;;; custom shells
 ;;; A template, which can be used for almost every kind of shells.
