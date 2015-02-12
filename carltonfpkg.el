@@ -458,7 +458,7 @@ the original `shell-resync-dirs'."
                            (concat "cd " new-curdir " ; \\"))))
   (shell-resync-dirs))
 
-(defvar myi-console-mode-list '(shell-mode eshell-mode)
+(defvar myi-console-mode-list '(comint-mode eshell-mode)
   "A list of modes whose buffers are considered as 'consoles' and
 can be switched using `myi-consoles'.")
 
@@ -475,9 +475,14 @@ can be switched using `myi-consoles'.")
   but normally it should create a buffer and set up its major
   mode.")
 
+(defun derived-mode-p-2 (mm &rest modes)
+  "Test whether mm is derived from one of the MODES "
+  (let ((major-mode mm))
+    (apply #'derived-mode-p modes)))
+
 (defun myi-consoles (&optional prompt-choices)
   "An all-in-one command for all interactive buffers, i.e.
-various REPL buffers, `eshell', `shell' buffers. With no
+various REPL buffers, `eshell', `comint'-derived buffers. With no
 argument, switch to last visited console. If the current buffer
 is already one of the consoles, prompt to switch to another
 console in current window.
@@ -485,20 +490,20 @@ console in current window.
 A list of supported 'console' modes are stored in
 `myi-console-mode-list'. A user can also customize
 `myi-console-autostarts' to have a console buffer with special
-initializations."
+initialization."
   (interactive "P")
   (let* (console-buffer-list
          next-console
          prompted-next-console
-         (is-in-console (member major-mode myi-console-mode-list)))
+         is-in-console)
     ;; setup `console-buffer-list', it's a list of all active console buffers
-    ;; AND autostart buffers. Note the use of `add-to-list' to avoid repetition.
-    (setq
-     console-buffer-list
-     (loop for buf in (buffer-list)
-           if (and (member (buffer-local-value 'major-mode buf)
-                           myi-console-mode-list))
-           collect (buffer-name buf)))
+    ;; AND autostart buffers.
+    (setq console-buffer-list
+          (loop for buf in (buffer-list)
+                when (apply #'derived-mode-p-2
+                            (buffer-local-value 'major-mode buf)
+                            myi-console-mode-list)
+                collect (buffer-name buf)))
     (mapc (lambda (buf-func-pair)
             (add-to-list 'console-buffer-list
                          (car buf-func-pair) t))
@@ -516,6 +521,8 @@ initializations."
     (setq prompted-next-console next-console)
 
     ;; manual console switching needed.
+    (setq is-in-console (member (buffer-name (current-buffer))
+                                console-buffer-list))
     (when (or prompt-choices
               (null next-console)
               is-in-console)
