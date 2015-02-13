@@ -607,10 +607,15 @@ Related data include stateful ones are stored in
            ;; Choices of consoles are displayed when
            ;; 1. User explicitly requires.
            ;; 2. `myi-consoles' is issued while current buffer is a console.
+           ;; 3. There are more than one choice in `console-mru-list'.
+           ;; 4. The first candidate is an non-existent autostart buffer.
            (in-console-p (buffer-mru-list-contains? data
                                                     (current-buffer)))
            (prompt-choices-p (or prompt-choices-p
-                                 in-console-p))
+                                 in-console-p
+                                 (= (length console-mru-list) 1)
+                                 (not (buffer-live-p (get-buffer
+                                                      (car console-mru-list))))))
            chosen-console)
       (if prompt-choices-p
           (setq chosen-console (ido-completing-read
