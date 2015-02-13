@@ -799,6 +799,59 @@ consider text properties."
 (eval-when-compile
   (require 'ido))
 
+(defvar with-namespace-package-separator "-"
+  "The separator used to separate package and members. Common
+ones include '-', '/'.")
+
+(defmacro with-namespace (spec package-name &rest body)
+  "Simple namespace macro."
+  (declare (indent 2))
+  ;; let's deal with simplest case
+  (let ((sep-len (length with-namespace-package-separator))
+        mappings)
+    (pcase spec
+      ;; not sure whether this is useful? maybe a later binding?
+      (`nil
+       (warn "No symbols are imported from %s!" package-name))
+      ;; import all
+      ((or :all `t)
+       (setq mappings (loop for sym being the symbols
+                            when (and (< (length package-name)
+                                         (length (symbol-name sym)))
+                                      (string-prefix-p package-name
+                                                       (symbol-name sym))) 
+                            collect (list (intern
+                                           (substring (symbol-name sym)
+                                                      (+ (length package-name)
+                                                         sep-len)))
+                                          sym))))
+      ;; only import symbols listed in SPEC
+      ((pred listp)
+       (setq mappings
+             (mapcar (lambda (sym)
+                       (let* ((full-sym-name (concat package-name
+                                                     with-namespace-package-separator
+                                                     (symbol-name sym)))
+                              (full-sym (intern-soft full-sym-name)))
+                         (unless full-sym
+                           (error "'%s' is NOT defined." full-sym-name))
+                         (list sym full-sym)))
+                     spec))))
+    ;; output form
+    `(cl-symbol-macrolet ,mappings
+       ,@body)))
+
+;; (pp-macroexpand-all-expression
+;;  '(with-namespace :all "recentloc"
+;;     (message "hi")
+;;     (print marker-table)))
+
+;; (pp-macroexpand-all-expression
+;;  '(with-namespace (marker-buffer-idle-cleaner) "recentloc"
+;;     (message "hi")
+;;     (print marker-table)
+;;     (print marker-buffer-idle-cleaner)))
+
 (defvar myi-auxiliary-buffer-alist '(("*scratch*")
                                      ("*scratch-text*"
                                       . (progn
@@ -828,30 +881,36 @@ Otherwise, add the current buffer into auxiliary list."
   (if toggle-add-remove
       (myi-auxiliary-buffer-add/remove-the-current)
     ;; switching
-    (let* ((is-auxiliary-buffer (assoc (buffer-name (current-buffer))
-                                       myi-auxiliary-buffer-alist))
-           (last-aux-buf (car myi-auxiliary-buffer-history))
-           (last-2nd-aux-buf (cadr myi-auxiliary-buffer-history))
-           (aux-chosen-buffer last-aux-buf)
-           aux-chosen-buffer-newly-created)
-      (when (or is-auxiliary-buffer
-                (null myi-auxiliary-buffer-history))
-        ;; TODO `ido-completing-read' will damage CHOICES list in
-        ;; `ido-make-choice-list' if DEF is not nil. I think this is a bug, but
-        ;; here is a workaround.
-        (setq aux-chosen-buffer (ido-completing-read "Auxiliary buffers: "
-                                                     (copy-tree (assoc-keys myi-auxiliary-buffer-alist))
-                                                     nil t nil 'myi-auxiliary-buffer-history
+    (let* ((aux-buf-alist myi-auxiliary-buffer-alist)
+           (aux-buf-hist myi-auxiliary-buffer-history)
+           (aux-buffer-p (assoc (buffer-name (current-buffer))
+                                myi-auxiliary-buffer-alist))
+           ;; TODO `ido-completing-read' will damage CHOICES list in
+           ;; `ido-make-choice-list' if DEF is not nil. I think this is a bug, but
+           ;; here is a workaround.
+           (buf-candidates (copy-tree
+                            (if aux-buffer-p
+                                ;; remove current buf
+                                (cdr (assoc-keys aux-buf-alist))
+                              (assoc-keys aux-buf-alist))))
+           (last-buf (car aux-buf-hist))
+           (last-2nd-aux-buf (cadr aux-buf-hist))
+           (chosen-buffer last-buf))
+      (when (or aux-buffer-p
+                (null aux-buf-hist))
+        (setq chosen-buffer (ido-completing-read "Auxiliary buffers: "
+                                                 (copy-tree
+                                                  (cdr (assoc-keys myi-auxiliary-buffer-alist)))
+                                                 nil t nil 'aux-buf-hist
                                                      last-2nd-aux-buf)))
-      (setq aux-chosen-buffer-newly-created
-            (not (get-buffer aux-chosen-buffer)))
       ;; create the buffer if does not existed
-      (switch-to-buffer (get-buffer-create aux-chosen-buffer))
+      (switch-to-buffer (get-buffer-create chosen-buffer))
       ;; run the associated hook
-      (when aux-chosen-buffer-newly-created
-        (eval (cdr (assoc aux-chosen-buffer myi-auxiliary-buffer-alist))))
+      (when (not (buffer-live-p
+                  (get-buffer chosen-buffer)))
+        (eval (cdr (assoc chosen-buffer myi-auxiliary-buffer-alist))))
       ;; don't fill the buffer list with auxiliary buffers.
-      (when is-auxiliary-buffer
+      (when aux-buffer-p
         (bury-buffer (other-buffer))))))
 
 (defun myi-auxiliary-buffer-add/remove-the-current ()
