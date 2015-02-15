@@ -793,64 +793,11 @@ consider text properties."
 (ad-activate #'Info-goto-node)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; enhanced utility buffers
+;;;: myi-auxiliary-buffers
 ;;;
 ;; This leads to default *scratch* buffer, used for non-important scratch
 (eval-when-compile
   (require 'ido))
-
-(defvar with-namespace-package-separator "-"
-  "The separator used to separate package and members. Common
-ones include '-', '/'.")
-
-(defmacro with-namespace (spec package-name &rest body)
-  "Simple namespace macro."
-  (declare (indent 2))
-  ;; let's deal with simplest case
-  (let ((sep-len (length with-namespace-package-separator))
-        mappings)
-    (pcase spec
-      ;; not sure whether this is useful? maybe a later binding?
-      (`nil
-       (warn "No symbols are imported from %s!" package-name))
-      ;; import all
-      ((or :all `t)
-       (setq mappings (loop for sym being the symbols
-                            when (and (< (length package-name)
-                                         (length (symbol-name sym)))
-                                      (string-prefix-p package-name
-                                                       (symbol-name sym))) 
-                            collect (list (intern
-                                           (substring (symbol-name sym)
-                                                      (+ (length package-name)
-                                                         sep-len)))
-                                          sym))))
-      ;; only import symbols listed in SPEC
-      ((pred listp)
-       (setq mappings
-             (mapcar (lambda (sym)
-                       (let* ((full-sym-name (concat package-name
-                                                     with-namespace-package-separator
-                                                     (symbol-name sym)))
-                              (full-sym (intern-soft full-sym-name)))
-                         (unless full-sym
-                           (error "'%s' is NOT defined." full-sym-name))
-                         (list sym full-sym)))
-                     spec))))
-    ;; output form
-    `(cl-symbol-macrolet ,mappings
-       ,@body)))
-
-;; (pp-macroexpand-all-expression
-;;  '(with-namespace :all "recentloc"
-;;     (message "hi")
-;;     (print marker-table)))
-
-;; (pp-macroexpand-all-expression
-;;  '(with-namespace (marker-buffer-idle-cleaner) "recentloc"
-;;     (message "hi")
-;;     (print marker-table)
-;;     (print marker-buffer-idle-cleaner)))
 
 (defvar myi-auxiliary-buffer-alist '(("*scratch*")
                                      ("*scratch-text*"
@@ -859,7 +806,7 @@ ones include '-', '/'.")
                                           (visual-line-mode 1)
                                           (flyspell-mode-on))))
   "List of auxiliary buffers, which can be easily accessed
-through `myi-auxiliary-buffers-switch'. New buffers can also be
+through `myi-auxiliary-buffer-switch'. New buffers can also be
 added by using `myi-auxiliary-buffer-add/remove-the-current',
 only added buffers can be removed though.
 
@@ -869,7 +816,7 @@ the FORM is to be evaluated when this buffer is created.")
 (defvar myi-auxiliary-buffer-history nil
   "Auxiliary buffer selection history.")
 
-(defun myi-auxiliary-buffers-switch (&optional toggle-add-remove)
+(defun myi-auxiliary-buffer-switch (&optional toggle-add-remove)
   "Fast switch to one buffer in `myi-auxiliary-buffer-alist'.
 If the current buffer is one of the buffers, try to switch to
 another one with `ido' prompt.
@@ -878,45 +825,55 @@ TOGGLE-ADD-REMOVE - if the current buffer is in auxiliary
 buffers, remove the current buffer from auxiliary list.
 Otherwise, add the current buffer into auxiliary list."
   (interactive "P")
-  (if toggle-add-remove
-      (myi-auxiliary-buffer-add/remove-the-current)
-    ;; switching
-    (let* ((aux-buf-alist myi-auxiliary-buffer-alist)
-           (aux-buf-hist myi-auxiliary-buffer-history)
-           (aux-buffer-p (assoc (buffer-name (current-buffer))
-                                myi-auxiliary-buffer-alist))
-           ;; TODO `ido-completing-read' will damage CHOICES list in
-           ;; `ido-make-choice-list' if DEF is not nil. I think this is a bug, but
-           ;; here is a workaround.
-           (buf-candidates (copy-tree
-                            (if aux-buffer-p
-                                ;; remove current buf
-                                (cdr (assoc-keys aux-buf-alist))
-                              (assoc-keys aux-buf-alist))))
-           (last-buf (car aux-buf-hist))
-           (last-2nd-aux-buf (cadr aux-buf-hist))
-           (chosen-buffer last-buf))
-      (when (or aux-buffer-p
-                (null aux-buf-hist))
-        (setq chosen-buffer (ido-completing-read "Auxiliary buffers: "
-                                                 (copy-tree
-                                                  (cdr (assoc-keys myi-auxiliary-buffer-alist)))
-                                                 nil t nil 'aux-buf-hist
-                                                     last-2nd-aux-buf)))
-      ;; create the buffer if does not existed
-      (switch-to-buffer (get-buffer-create chosen-buffer))
-      ;; run the associated hook
-      (when (not (buffer-live-p
-                  (get-buffer chosen-buffer)))
-        (eval (cdr (assoc chosen-buffer myi-auxiliary-buffer-alist))))
-      ;; don't fill the buffer list with auxiliary buffers.
-      (when aux-buffer-p
-        (bury-buffer (other-buffer))))))
+  (cl-symbol-macrolet
+      ((alist myi-auxiliary-buffer-alist)
+       (history myi-auxiliary-buffer-history))
+    (if toggle-add-remove
+        (myi-auxiliary-buffer-add/remove-the-current)
+      ;; switching
+      (let* ((aux-buffer-p (assoc (buffer-name (current-buffer)) alist))
+             ;; TODO `ido-completing-read' will damage CHOICES list in
+             ;; `ido-make-choice-list' if DEF is not nil. I think this is a bug, but
+             ;; here is a workaround.
+             ;; Here we use `history' to create an MRU buffer list.
+             (mru-buf-candidates (-uniq
+                                  (append history
+                                          (copy-tree
+                                           (assoc-keys alist)))))
+             ;; default to last one
+             (chosen-buffer (progn (when aux-buffer-p
+                                     (setq mru-buf-candidates
+                                           (cdr mru-buf-candidates)))
+                                   (car mru-buf-candidates))))
+        ;; prompting choices under these conditions
+        ;; 1. Currently in an aux buffer AND there are more than 1 candidates avaible
+        ;; 2. Next candidate doesn't exit yet.
+        (if (or (and aux-buffer-p
+                     (> (length mru-buf-candidates) 1))
+                (not (buffer-live-p
+                      (get-buffer chosen-buffer))))
+            (setq chosen-buffer
+                  (ido-completing-read
+                   "Auxiliary Buffer: " mru-buf-candidates
+                   ;; simply `'hist' wouldn't work.
+                   nil t nil 'myi-auxiliary-buffer-history 
+                   chosen-buffer))
+          ;; manually manage history
+          (push chosen-buffer history))
+        ;; create the buffer if does not existed
+        (switch-to-buffer-other-window (get-buffer-create chosen-buffer))
+        ;; run the associated hook
+        (when (not (buffer-live-p
+                    (get-buffer chosen-buffer)))
+          (eval (cdr (assoc chosen-buffer myi-auxiliary-buffer-alist))))
+        ;; don't fill the buffer list with auxiliary buffers.
+        (when aux-buffer-p
+          (bury-buffer (other-buffer)))))))
 
 (defun myi-auxiliary-buffer-add/remove-the-current ()
   "Add/remove current buffer to/from
 `myi-auxiliary-buffer-history'. Used in
-`myi-auxiliary-buffers-switch'.
+`myi-auxiliary-buffer-switch'.
 
 Newly added and removable buffers are in the form '(BUF-NAME)."
   (let* ((current-buf-name (buffer-name (current-buffer)))
