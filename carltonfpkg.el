@@ -542,9 +542,12 @@ TODO some hooks to do auto-updates?"
                          chosen-console))))
         ;; global update
         (setq buffer-mru-alist
-              (remove-if-not (lambda (bt-pair)
-                               (buffer-live-p (car bt-pair)))
-                             buffer-mru-alist))
+              (remove-if (lambda (bt-pair)
+                           (let ((bufname (car bt-pair)))
+                             (and (not (assoc bufname autostarts))
+                                  (not (buffer-live-p (get-buffer
+                                                       bufname))))))
+                         buffer-mru-alist))
         (loop for buf in (buffer-list)
               when (derived-member-of-mode-list? this
                                                  (buffer-local-value 'major-mode buf))
@@ -601,27 +604,26 @@ Related data include stateful ones are stored in
     (buffer-mru-list-update data)
     (unless (buffer-mru-list data)
       (error "Myi-Consoles: No consoles are available."))
-    (let* ((console-mru-list (remove-if (lambda (bufn)
-                                          (string-equal bufn (buffer-name)))
-                                        (buffer-mru-list data)))
+    (let* ((console-mru-list (buffer-mru-list data))
            ;; Choices of consoles are displayed when
            ;; 1. User explicitly requires.
            ;; 2. `myi-consoles' is issued while current buffer is a console.
            ;; 3. There are more than one choice in `console-mru-list'.
            ;; 4. The first candidate is an non-existent autostart buffer.
-           (in-console-p (buffer-mru-list-contains? data
-                                                    (current-buffer)))
+           (in-console-p (when (buffer-mru-list-contains?
+                                data (current-buffer))
+                           (setq console-mru-list
+                                 (remove (buffer-name) console-mru-list))
+                           t))
            (prompt-choices-p (or prompt-choices-p
                                  in-console-p
                                  (= (length console-mru-list) 1)
                                  (not (buffer-live-p (get-buffer
                                                       (car console-mru-list))))))
-           chosen-console)
-      (if prompt-choices-p
-          (setq chosen-console (ido-completing-read
-                                "Console: "
-                                console-mru-list nil t))
-        (setq chosen-console (car console-mru-list)))
+           (chosen-console (if prompt-choices-p
+                               (ido-completing-read
+                                "Console: " console-mru-list nil t)
+                             (car console-mru-list))))
       (buffer-mru-list-update data chosen-console)
       ;; switching console
       ;; reuse current window if already in a console
