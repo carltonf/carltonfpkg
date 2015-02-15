@@ -833,7 +833,7 @@ Otherwise, add the current buffer into auxiliary list."
     (if toggle-add-remove
         (myi-auxiliary-buffer-add/remove-the-current)
       ;; switching
-      (let* ((aux-buffer-p (assoc (buffer-name (current-buffer)) alist))
+      (let* ((in-aux-buffer-p (assoc (buffer-name (current-buffer)) alist))
              ;; TODO `ido-completing-read' will damage CHOICES list in
              ;; `ido-make-choice-list' if DEF is not nil. I think this is a bug, but
              ;; here is a workaround.
@@ -843,14 +843,14 @@ Otherwise, add the current buffer into auxiliary list."
                                           (copy-tree
                                            (assoc-keys alist)))))
              ;; default to last one
-             (chosen-buffer (progn (when aux-buffer-p
+             (chosen-buffer (progn (when in-aux-buffer-p
                                      (setq mru-buf-candidates
                                            (cdr mru-buf-candidates)))
                                    (car mru-buf-candidates))))
         ;; prompting choices under these conditions
         ;; 1. Currently in an aux buffer AND there are more than 1 candidates avaible
         ;; 2. Next candidate doesn't exit yet.
-        (if (or (and aux-buffer-p
+        (if (or (and in-aux-buffer-p
                      (> (length mru-buf-candidates) 1))
                 (not (buffer-live-p
                       (get-buffer chosen-buffer))))
@@ -862,14 +862,18 @@ Otherwise, add the current buffer into auxiliary list."
                    chosen-buffer))
           ;; manually manage history
           (push chosen-buffer history))
-        ;; create the buffer if does not existed
-        (switch-to-buffer-other-window (get-buffer-create chosen-buffer))
+        ;; two consecutive `myi-auxiliary-buffer-switch' shows that the user's
+        ;; intention is to switch to an aux buffer other than last one
+        (funcall (if in-aux-buffer-p
+                     #'switch-to-buffer
+                   #'switch-to-buffer-other-window)
+                 (get-buffer-create chosen-buffer))
         ;; run the associated hook
         (when (not (buffer-live-p
                     (get-buffer chosen-buffer)))
           (eval (cdr (assoc chosen-buffer myi-auxiliary-buffer-alist))))
         ;; don't fill the buffer list with auxiliary buffers.
-        (when aux-buffer-p
+        (when in-aux-buffer-p
           (bury-buffer (other-buffer)))))))
 
 (defun myi-auxiliary-buffer-add/remove-the-current ()
