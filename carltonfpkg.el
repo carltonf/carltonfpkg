@@ -826,54 +826,51 @@ TOGGLE-ADD-REMOVE - if the current buffer is in auxiliary
 buffers, remove the current buffer from auxiliary list.
 Otherwise, add the current buffer into auxiliary list."
   (interactive "P")
-  (cl-symbol-macrolet
-      ((alist myi-auxiliary-buffer-alist)
-       (history myi-auxiliary-buffer-history))
-    (if toggle-add-remove
-        (myi-auxiliary-buffer-add/remove-the-current)
-      ;; switching
-      (let* ((in-aux-buffer-p (assoc (buffer-name (current-buffer)) alist))
-             ;; TODO `ido-completing-read' will damage CHOICES list in
-             ;; `ido-make-choice-list' if DEF is not nil. I think this is a bug, but
-             ;; here is a workaround.
-             ;; Here we use `history' to create an MRU buffer list.
-             (mru-buf-candidates (-uniq
-                                  (append history
-                                          (copy-tree
-                                           (assoc-keys alist)))))
-             ;; default to last one
-             (chosen-buffer (progn (when in-aux-buffer-p
-                                     (setq mru-buf-candidates
-                                           (cdr mru-buf-candidates)))
-                                   (car mru-buf-candidates))))
-        ;; prompting choices under these conditions
-        ;; 1. Currently in an aux buffer AND there are more than 1 candidates avaible
-        ;; 2. Next candidate doesn't exit yet.
-        (if (or (and in-aux-buffer-p
+  (if toggle-add-remove
+      (myi-auxiliary-buffer-add/remove-the-current)
+    ;; switching
+    (let* ((in-aux-buffer-p (assoc (buffer-name (current-buffer)) myi-auxiliary-buffer-alist))
+           ;; TODO `ido-completing-read' will damage CHOICES list in
+           ;; `ido-make-choice-list' if DEF is not nil. I think this is a bug, but
+           ;; here is a workaround.
+           ;; Here we use `myi-auxiliary-buffer-history' to create an MRU buffer list.
+           (mru-buf-candidates (copy-tree
+                                (-uniq
+                                 (append myi-auxiliary-buffer-history
+                                         (assoc-keys myi-auxiliary-buffer-alist)))))
+           ;; default to last one
+           (chosen-buffer (progn (when in-aux-buffer-p
+                                   (setq mru-buf-candidates
+                                         (cdr mru-buf-candidates)))
+                                 (car mru-buf-candidates))))
+      ;; prompting choices under these conditions
+      ;; 1. Currently in an aux buffer AND there are more than 1 candidates available
+      ;; 2. Next candidate doesn't exit yet.
+      (when (or (and in-aux-buffer-p
                      (> (length mru-buf-candidates) 1))
                 (not (buffer-live-p
                       (get-buffer chosen-buffer))))
-            (setq chosen-buffer
-                  (ido-completing-read
-                   "Auxiliary Buffer: " mru-buf-candidates
-                   ;; simply `'hist' wouldn't work.
-                   nil t nil 'myi-auxiliary-buffer-history 
-                   chosen-buffer))
-          ;; manually manage history
-          (push chosen-buffer history))
-        ;; two consecutive `myi-auxiliary-buffer-switch' shows that the user's
-        ;; intention is to switch to an aux buffer other than last one
-        (funcall (if in-aux-buffer-p
-                     #'switch-to-buffer
-                   #'switch-to-buffer-other-window)
-                 (get-buffer-create chosen-buffer))
-        ;; run the associated hook
-        (when (not (buffer-live-p
-                    (get-buffer chosen-buffer)))
-          (eval (cdr (assoc chosen-buffer myi-auxiliary-buffer-alist))))
-        ;; don't fill the buffer list with auxiliary buffers.
-        (when in-aux-buffer-p
-          (bury-buffer (other-buffer)))))))
+        (setq chosen-buffer
+              (ido-completing-read
+               "Auxiliary Buffer: " mru-buf-candidates
+               ;; simply `'hist' wouldn't work.
+               nil t nil nil
+               chosen-buffer)))
+      ;; manually manage history
+      (push chosen-buffer myi-auxiliary-buffer-history)
+      ;; two consecutive `myi-auxiliary-buffer-switch' shows that the user's
+      ;; intention is to switch to an aux buffer other than last one
+      (funcall (if in-aux-buffer-p
+                   #'switch-to-buffer
+                 #'switch-to-buffer-other-window)
+               (get-buffer-create chosen-buffer))
+      ;; run the associated hook
+      (when (not (buffer-live-p
+                  (get-buffer chosen-buffer)))
+        (eval (cdr (assoc chosen-buffer myi-auxiliary-buffer-alist))))
+      ;; don't fill the buffer list with auxiliary buffers.
+      (when in-aux-buffer-p
+        (bury-buffer (other-buffer))))))
 
 (defun myi-auxiliary-buffer-add/remove-the-current ()
   "Add/remove current buffer to/from
