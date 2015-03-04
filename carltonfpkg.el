@@ -834,10 +834,11 @@ Otherwise, add the current buffer into auxiliary list."
            ;; `ido-make-choice-list' if DEF is not nil. I think this is a bug, but
            ;; here is a workaround.
            ;; Here we use `myi-auxiliary-buffer-history' to create an MRU buffer list.
-           (mru-buf-candidates (copy-tree
-                                (-uniq
-                                 (append myi-auxiliary-buffer-history
-                                         (assoc-keys myi-auxiliary-buffer-alist)))))
+           (mru-buf-candidates (let ((candidates (-uniq
+                                                  (append myi-auxiliary-buffer-history
+                                                          (assoc-keys myi-auxiliary-buffer-alist)))))
+                                 (setq myi-auxiliary-buffer-history (copy-tree candidates))
+                                 candidates))
            ;; default to last one
            (chosen-buffer (progn (when in-aux-buffer-p
                                    (setq mru-buf-candidates
