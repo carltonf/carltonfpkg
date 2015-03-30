@@ -38,6 +38,7 @@
 
 ;;; Code:
 (eval-when-compile (require 'cl))
+(require 'dash)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Variables Definitions, put here at the very beginnings to avoid
