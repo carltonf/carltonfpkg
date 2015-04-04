@@ -338,7 +338,6 @@ up a window for selecting files to be moved here."
   (if arg
       (call-interactively #'myi-dired-rename-file-here)
     (call-interactively #'diredp-rename-this-file)))
-(define-key dired-mode-map (kbd "r") #'diredp-rename-this/other-file)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Enhanced Movement
