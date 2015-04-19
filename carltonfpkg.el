@@ -353,7 +353,7 @@ up a window for selecting files to be moved here."
   (scroll-up 1))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; recentloc
+;;;: recentloc
 ;;;
 ;;; If we need to jump around two places often, use marks `C-x C-x' and etc
 ;;;
@@ -1674,6 +1674,48 @@ property list."
   (add-to-list 'company-backends #'company-sqlite))
 (add-hook 'sql-interactive-mode-hook #'company-sqlite-enabler)
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;: Integrated Compilation
+;; TODO make a dwim version, that can work according to current major mode of
+;; the buffer.
+(defun compile-dwim ()
+  "Integrate `compile', `recompile' and project root.
+
+`compile' is used to set up `compilation-directory' and
+`compile-command', and `recompile' by default would reuse these
+two configurations.
+
+This function has the following behavior.
+1. default to run `recompile' if `compilation-directory' remains
+the same as the project root. Project root is searched with `vc'.
+2. `recompile' has EDIT-COMMAND set.
+3. if project root has changed and it's not `default-directory',
+call `compile', offer a choice to set `default-directory' to
+project root for `compile'."
+  (interactive)
+  (let ((supported-proj-types '("git"))
+        (proj-root
+         (vc-find-root (or (buffer-file-name (current-buffer))
+                           ;; make this work even for nonfile buffer
+                           default-directory)
+                       ".git/")))
+    (if (string-equal proj-root compilation-directory)
+        (let ((current-prefix-arg '(4)))
+          ;; (message "Info: Run recompile in [%s]" proj-root)
+          (call-interactively #'recompile))
+      
+      (let ((default-directory
+              (if (and ; proj-root        ;non-project root is not used
+                       (not (string-equal default-directory proj-root))
+                       (y-or-n-p
+                        (format "Detected Project Root [%s] != CWD[%s].\nUse Project Root? "
+                                proj-root default-directory)))
+                  proj-root
+                (message "WARN: Compilation directory set to: [%s]."
+                         default-directory)
+                (sleep-for 1 200)
+                default-directory)))
+        (call-interactively #'compile)))))
 
 (provide 'carltonfpkg)
 ;;; carltonfpkg.el ends here
