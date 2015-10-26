@@ -656,11 +656,14 @@ Related data include stateful ones are stored in
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;: Emacs Lisp organization
 ;;: IMenu support for self-organized source format
-(defun myi-emacs-lisp-setup-organization-imenu ()
-  "Add extra organization items to imenus."
-  (add-to-list 'imenu-generic-expression
-               '("Section" "^;;;: \\([- +_[:alnum:]]+\\)" 1)))
-(add-hook 'emacs-lisp-mode-hook #'myi-emacs-lisp-setup-organization-imenu)
+;; (defun myi-emacs-lisp-setup-organization-imenu ()
+;;   "Add extra organization items to imenus."
+;;   (add-to-list 'imenu-generic-expression
+;;                '("Section" "^;;;: \\([- +_[:alnum:]]+\\)" 1)))
+;; (add-hook 'emacs-lisp-mode-hook #'myi-emacs-lisp-setup-organization-imenu)
+;;
+;; Superseded by `outshine' and `outline-minor-mode'
+;;
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;: Man Page
@@ -1137,7 +1140,8 @@ sequence of words."
                                             "ruby"
                                             ;; non-code mode
                                             "text"
-                                            "diff"))))
+                                            "diff"
+                                            "css"))))
   ;; (indent-according-to-mode)
   (let (org-src-block-template-macro)
     (fset 'org-src-block-template-macro
@@ -1653,36 +1657,38 @@ property list."
 two configurations.
 
 This function has the following behavior.
+0. Will always try to reuse arguments from previous compilation.
 1. default to run `recompile' if `compilation-directory' remains
-the same as the project root. Project root is searched with `vc'.
-2. `recompile' has EDIT-COMMAND set.
+the same as the project root. Project root is searched with `vc-find-root'.
+2. `recompile' has EDIT-COMMAND arg set to verify the arguments.
 3. if project root has changed and it's not `default-directory',
 call `compile', offer a choice to set `default-directory' to
 project root for `compile'."
   (interactive)
-  (let ((supported-proj-types '("git"))
-        (proj-root
-         (vc-find-root (or (buffer-file-name (current-buffer))
-                           ;; make this work even for nonfile buffer
+  ;; always try to reuse last compilation arguments
+  (let ((proj-root (vc-find-root (or (buffer-file-name (current-buffer))
+                                     default-directory)
+                                 ".git/"))
+        (buf-def-dir default-directory))
+    (with-current-buffer "*compilation*"
+      (if (string-equal proj-root compilation-directory)
+          (let ((current-prefix-arg '(4)))
+            (call-interactively #'recompile))
+        ;; project root changed
+        (let ((default-directory
+                (if (and (not (string-equal buf-def-dir proj-root))
+                         (y-or-n-p
+                          (format "Detected Project Root [%s] != CWD[%s].\nUse Project Root? "
+                                  proj-root buf-def-dir)))
+                    proj-root
+                  ;; use default directory, usually NOT the correct one
+                  (message "WARN: Compilation directory set to: [%s]."
                            default-directory)
-                       ".git/")))
-    (if (string-equal proj-root compilation-directory)
-        (let ((current-prefix-arg '(4)))
-          ;; (message "Info: Run recompile in [%s]" proj-root)
-          (call-interactively #'recompile))
-      
-      (let ((default-directory
-              (if (and ; proj-root        ;non-project root is not used
-                       (not (string-equal default-directory proj-root))
-                       (y-or-n-p
-                        (format "Detected Project Root [%s] != CWD[%s].\nUse Project Root? "
-                                proj-root default-directory)))
-                  proj-root
-                (message "WARN: Compilation directory set to: [%s]."
-                         default-directory)
-                (sleep-for 1 200)
-                default-directory)))
-        (call-interactively #'compile)))))
+                  ;; sleep for a while so the user has a chance to cancel current
+                  ;; operation.
+                  (sleep-for 1 200)
+                  default-directory)))
+          (call-interactively #'compile))))))
 
 (provide 'carltonfpkg)
 ;;; carltonfpkg.el ends here
