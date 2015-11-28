@@ -1130,18 +1130,21 @@ sequence of words."
                 (kill-new captured-snippet))))
       (kill-buffer snippet-buf))))
 
+(defvar myi-org-source-block-common-list
+  '("emacs-lisp"
+    "shell-script"
+    "python"
+    "ruby"
+    "javascript" "html"
+    ;; non-code mode
+    "text"
+    "diff")
+  "A common list of types of org source block.")
+
 (defun org-insert-source-block-and-edit (language)
   "A helper function to insert a source block."
-  (interactive (list (ido-completing-read "Language: "
-                                          ;; manual list of commonly used modes
-                                          '("emacs-lisp"
-                                            "shell-script"
-                                            "python"
-                                            "ruby"
-                                            ;; non-code mode
-                                            "text"
-                                            "diff"
-                                            "css"))))
+  (interactive (list (ido-completing-read "Source Type: "
+                                          myi-org-source-block-common-list)))
   ;; (indent-according-to-mode)
   (let (org-src-block-template-macro)
     (fset 'org-src-block-template-macro
@@ -1666,9 +1669,8 @@ call `compile', offer a choice to set `default-directory' to
 project root for `compile'."
   (interactive)
   ;; always try to reuse last compilation arguments
-  (let ((proj-root (vc-find-root (or (buffer-file-name (current-buffer))
-                                     default-directory)
-                                 ".git/"))
+  (let ((proj-root (vc-find-root default-directory)
+                   ".git/"))
         (buf-def-dir default-directory))
     (with-current-buffer "*compilation*"
       (if (string-equal proj-root compilation-directory)
