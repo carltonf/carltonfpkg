@@ -1669,8 +1669,8 @@ call `compile', offer a choice to set `default-directory' to
 project root for `compile'."
   (interactive)
   ;; always try to reuse last compilation arguments
-  (let ((proj-root (vc-find-root default-directory)
-                   ".git/"))
+  (let ((proj-root (or (vc-find-root default-directory ".git/")
+                       default-directory))
         (buf-def-dir default-directory))
     (with-current-buffer "*compilation*"
       (if (string-equal proj-root compilation-directory)
