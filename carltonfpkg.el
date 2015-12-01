@@ -1653,44 +1653,41 @@ property list."
 ;; TODO make a dwim version, that can work according to current major mode of
 ;; the buffer.
 (defun compile-dwim ()
-  "Integrate `compile', `recompile' and project root.
+  "`compile' or `recompile' according to project root, and try to
+reuse last compilation setup.
 
-`compile' is used to set up `compilation-directory' and
-`compile-command', and `recompile' by default would reuse these
-two configurations.
-
-This function has the following behavior.
-0. Will always try to reuse arguments from previous compilation.
-1. default to run `recompile' if `compilation-directory' remains
-the same as the project root. Project root is searched with `vc-find-root'.
-2. `recompile' has EDIT-COMMAND arg set to verify the arguments.
-3. if project root has changed and it's not `default-directory',
-call `compile', offer a choice to set `default-directory' to
-project root for `compile'."
+Two use scenarios, use proj-root to decide whether:
+1. Just start/switch to compile a new project
+2. Still compile for the last project
+   In this case, the `recompile' command will be called in
+   '*compilation*' buffer to reuse configuration.
+"
   (interactive)
-  ;; always try to reuse last compilation arguments
-  (let ((proj-root (or (vc-find-root default-directory ".git/")
-                       default-directory))
-        (buf-def-dir default-directory))
-    (with-current-buffer "*compilation*"
-      (if (string-equal proj-root compilation-directory)
+  (let* ((proj-root (expand-file-name
+                     (or (vc-find-root default-directory ".git/")
+                         default-directory)))
+         (compilation-buf (get-buffer "*compilation*"))
+         (compile-the-same-prj-p (and (buffer-live-p compilation-buf)
+                                      ;; remember to canonicalize paths for comparison
+                                      (string-equal
+                                       (expand-file-name
+                                        (buffer-local-value 'default-directory
+                                                            compilation-buf))
+                                       proj-root))))
+    (if compile-the-same-prj-p
+        ;; recompile
+        (with-current-buffer compilation-buf
           (let ((current-prefix-arg '(4)))
-            (call-interactively #'recompile))
-        ;; project root changed
-        (let ((default-directory
-                (if (and (not (string-equal buf-def-dir proj-root))
-                         (y-or-n-p
-                          (format "Detected Project Root [%s] != CWD[%s].\nUse Project Root? "
-                                  proj-root buf-def-dir)))
-                    proj-root
-                  ;; use default directory, usually NOT the correct one
-                  (message "WARN: Compilation directory set to: [%s]."
-                           default-directory)
-                  ;; sleep for a while so the user has a chance to cancel current
-                  ;; operation.
-                  (sleep-for 1 200)
-                  default-directory)))
-          (call-interactively #'compile))))))
+            (call-interactively #'recompile)))
+      ;; new compilation
+      (let ((default-directory proj-root)
+            (confirm-switch-prompt (format "%s: Switch to NEW project? "
+                                           (propertize proj-root 'face 'hi-red-b))))
+        (if (y-or-n-p confirm-switch-prompt)
+            (call-interactively #'compile)
+          (message (concat (propertize "Abort compilation.\n" 'face 'hi-blue-b)
+                           (propertize "For recompilation, " 'face 'hi-black-b)
+                           "switch to buffer within the last project.")))))))
 
 (provide 'carltonfpkg)
 ;;; carltonfpkg.el ends here
